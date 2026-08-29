@@ -37,25 +37,7 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
     public async Task<HarnessProject> ResolveProjectAsync(
         RepoRef repo, int? projectNumber = null, CancellationToken ct = default)
     {
-        const string query = $$"""
-            query($owner: String!, $repo: String!) {
-              repository(owner: $owner, name: $repo) {
-                projectsV2(first: 20) { nodes { {{ProjectFragment}} } }
-              }
-            }
-            """;
-
-        var data = await graphQl.ExecuteAsync(
-            query, new { owner = repo.Owner, repo = repo.Repo }, $"resolver Project de {repo}", ct);
-
-        var repository = data.GetProperty("repository");
-        if (repository.ValueKind == JsonValueKind.Null)
-        {
-            throw new GitHubException($"Repositório {repo} não encontrado (ou token sem acesso).");
-        }
-
-        var nodes = repository.GetProperty("projectsV2").GetProperty("nodes")
-            .EnumerateArray().Select(ParseProject).ToList();
+        var nodes = await ListLinkedProjectsAsync(repo, ct);
 
         if (nodes.Count == 0)
         {
@@ -86,6 +68,145 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
         var choices = string.Join(", ", nodes.Select(p => $"#{p.Number} \"{p.Title}\""));
         throw new GitHubException(
             $"{repo} tem {nodes.Count} Projects vinculados ({choices}). Informe o número do board.");
+    }
+
+    /// <summary>Lista os Projects v2 vinculados a um repositório (com campos).</summary>
+    public async Task<IReadOnlyList<HarnessProject>> ListLinkedProjectsAsync(
+        RepoRef repo, CancellationToken ct = default)
+    {
+        const string query = $$"""
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) {
+                projectsV2(first: 20) { nodes { {{ProjectFragment}} } }
+              }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { owner = repo.Owner, repo = repo.Repo }, $"listar Projects de {repo}", ct);
+
+        var repository = data.GetProperty("repository");
+        if (repository.ValueKind == JsonValueKind.Null)
+        {
+            throw new GitHubException($"Repositório {repo} não encontrado (ou token sem acesso).");
+        }
+
+        return repository.GetProperty("projectsV2").GetProperty("nodes")
+            .EnumerateArray().Select(ParseProject).ToList();
+    }
+
+    /// <summary>Resolve o node id de um owner (organização ou usuário).</summary>
+    public async Task<string> ResolveOwnerIdAsync(string login, CancellationToken ct = default)
+    {
+        const string query = """
+            query($login: String!) {
+              organization(login: $login) { id }
+              user(login: $login) { id }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(query, new { login }, $"resolver owner '{login}'", ct);
+        return NonNullId(data, "organization", "user")
+            ?? throw new GitHubException($"Owner '{login}' não encontrado (organização ou usuário).");
+    }
+
+    /// <summary>Node id de um repositório.</summary>
+    public async Task<string> ResolveRepositoryIdAsync(RepoRef repo, CancellationToken ct = default)
+    {
+        const string query = """
+            query($owner: String!, $repo: String!) {
+              repository(owner: $owner, name: $repo) { id }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { owner = repo.Owner, repo = repo.Repo }, $"resolver repositório {repo}", ct);
+
+        var repository = data.GetProperty("repository");
+        return repository.ValueKind != JsonValueKind.Null
+            ? repository.GetProperty("id").GetString()!
+            : throw new GitHubException($"Repositório {repo} não encontrado (ou token sem acesso).");
+    }
+
+    /// <summary>Resolve um Project v2 pelo owner + número, já com os campos.</summary>
+    public async Task<HarnessProject> GetProjectByNumberAsync(
+        string login, int number, CancellationToken ct = default)
+    {
+        const string query = $$"""
+            query($login: String!, $number: Int!) {
+              organization(login: $login) { projectV2(number: $number) { {{ProjectFragment}} } }
+              user(login: $login) { projectV2(number: $number) { {{ProjectFragment}} } }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { login, number }, $"resolver Project #{number} de '{login}'", ct);
+
+        foreach (var prop in (ReadOnlySpan<string>)["organization", "user"])
+        {
+            if (data.TryGetProperty(prop, out var owner) && owner.ValueKind == JsonValueKind.Object
+                && owner.TryGetProperty("projectV2", out var project) && project.ValueKind == JsonValueKind.Object)
+            {
+                return ParseProject(project);
+            }
+        }
+
+        throw new GitHubException($"Project #{number} não encontrado em '{login}'.");
+    }
+
+    /// <summary>Copia um Project v2 (template) para outro owner. Mutation <c>copyProjectV2</c>.</summary>
+    public async Task<CopiedProject> CopyProjectAsync(
+        string sourceProjectId, string targetOwnerId, string title, CancellationToken ct = default)
+    {
+        const string mutation = """
+            mutation($projectId: ID!, $ownerId: ID!, $title: String!) {
+              copyProjectV2(input: {
+                projectId: $projectId, ownerId: $ownerId, title: $title, includeDraftIssues: false
+              }) {
+                projectV2 { id number title url }
+              }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            mutation, new { projectId = sourceProjectId, ownerId = targetOwnerId, title },
+            "copiar o Project template", ct);
+
+        var p = data.GetProperty("copyProjectV2").GetProperty("projectV2");
+        return new CopiedProject(
+            p.GetProperty("id").GetString()!,
+            p.GetProperty("number").GetInt32(),
+            p.GetProperty("title").GetString()!,
+            p.GetProperty("url").GetString()!);
+    }
+
+    /// <summary>Vincula um Project v2 a um repositório. Mutation <c>linkProjectV2ToRepository</c>.</summary>
+    public async Task LinkRepositoryAsync(string projectId, string repositoryId, CancellationToken ct = default)
+    {
+        const string mutation = """
+            mutation($projectId: ID!, $repositoryId: ID!) {
+              linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) {
+                repository { id }
+              }
+            }
+            """;
+
+        await graphQl.ExecuteAsync(
+            mutation, new { projectId, repositoryId }, "vincular o Project ao repositório", ct);
+    }
+
+    private static string? NonNullId(JsonElement data, params string[] props)
+    {
+        foreach (var prop in props)
+        {
+            if (data.TryGetProperty(prop, out var el) && el.ValueKind == JsonValueKind.Object
+                && el.TryGetProperty("id", out var id))
+            {
+                return id.GetString();
+            }
+        }
+
+        return null;
     }
 
     public async Task<ProjectItemRef> AddIssueAsync(
