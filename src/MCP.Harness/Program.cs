@@ -1,3 +1,4 @@
+using MCP.Harness.GitHub;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,8 @@ builder.Logging.AddConsole(options =>
 {
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
+
+builder.Services.AddHarnessGitHub(builder.Configuration);
 
 builder.Services
     .AddMcpServer()

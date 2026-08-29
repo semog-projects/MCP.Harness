@@ -100,6 +100,28 @@ tests/MCP.Harness.Tests/   # testes de unidade e integração
 scripts/bootstrap.sh       # script legado — referência para a tool harness_bootstrap
 ```
 
+### Camada de acesso ao GitHub
+
+`src/MCP.Harness.GitHub` isola toda a conversa com o GitHub e é registrada
+com `services.AddHarnessGitHub(configuration)`:
+
+- `IssuesClient` (REST) — criar/ler/fechar Issue, comentar.
+- `ProjectsV2Client` (GraphQL) — resolver o board de um repo, ler campos e
+  opções (`Status` / `Sprint` / `Story Points`), adicionar item, atualizar
+  valor de campo (single-select, iteration, number) e remover item.
+- `GitHubClient` — fachada com o atalho `PlaceOnBoardAsync` (add + status +
+  sprint + pontos).
+- `GitHubTokenProvider` — resolve o token: `GitHub:Token` → `GITHUB_TOKEN` /
+  `GH_TOKEN` → `gh auth token`. Erros da API viram `GitHubApiException` com
+  mensagem acionável (escopo faltando, rate limit, 404).
+
+Os testes de integração (`Category=Integration`) batem no GitHub real e só
+rodam com `HARNESS_IT=1` e `GITHUB_TOKEN` no ambiente:
+
+```bash
+HARNESS_IT=1 GITHUB_TOKEN=$(gh auth token) dotnet test --filter Category=Integration
+```
+
 ## Relação com o `bootstrap.sh`
 
 `scripts/bootstrap.sh` copia um Project-template v2 (com os campos

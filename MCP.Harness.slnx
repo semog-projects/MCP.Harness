@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/MCP.Harness.GitHub/MCP.Harness.GitHub.csproj" />
     <Project Path="src/MCP.Harness/MCP.Harness.csproj" />
   </Folder>
   <Folder Name="/tests/">
