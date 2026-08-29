@@ -4,6 +4,26 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>mcp-harness</AssemblyName>
     <RootNamespace>MCP.Harness</RootNamespace>
+    <RuntimeIdentifiers>linux-x64;linux-arm64;linux-musl-x64;osx-arm64;osx-x64;win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <!-- Pacote de servidor MCP: consumido via `dnx MCP.Harness`. -->
+  <PropertyGroup>
+    <PackAsTool>true</PackAsTool>
+    <PackageType>McpServer</PackageType>
+    <ToolCommandName>mcp-harness</ToolCommandName>
+    <SelfContained>true</SelfContained>
+    <PublishSelfContained>true</PublishSelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+
+    <PackageId>MCP.Harness</PackageId>
+    <Version>0.1.0-dev</Version>
+    <Description>Servidor MCP do sprint harness: bootstrap de board (GitHub Projects v2), criação de Issues rastreadas, transição de Status e snapshot da sprint.</Description>
+    <PackageTags>mcp;mcp-server;github;projects;sprint;harness;stdio</PackageTags>
+    <PackageProjectUrl>https://github.com/semog-projects/MCP.Harness</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +33,8 @@
 
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include=".mcp\server.json" Pack="true" PackagePath=".mcp\server.json" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>
