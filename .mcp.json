@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "harness": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/MCP.Harness/MCP.Harness.csproj"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}

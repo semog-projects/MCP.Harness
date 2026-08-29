@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MCP.Harness/MCP.Harness.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MCP.Harness.Tests/MCP.Harness.Tests.csproj" />
+  </Folder>
+</Solution>
