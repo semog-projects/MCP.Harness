@@ -49,6 +49,7 @@ public static class ServiceCollectionExtensions
         services.TryAddTransient<ProjectsV2Client>();
         services.TryAddTransient<GitHubClient>();
         services.TryAddTransient<BootstrapService>();
+        services.TryAddTransient<TaskService>();
 
         return services;
 

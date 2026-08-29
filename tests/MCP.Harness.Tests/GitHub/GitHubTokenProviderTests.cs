@@ -3,6 +3,15 @@ using Microsoft.Extensions.Options;
 
 namespace MCP.Harness.Tests.GitHub;
 
+/// <summary>
+/// Testes que mexem em variáveis de ambiente do processo. Ficam na mesma
+/// collection dos testes de integração para nunca rodarem em paralelo com
+/// quem lê <c>GITHUB_TOKEN</c>.
+/// </summary>
+[CollectionDefinition("environment-mutation", DisableParallelization = true)]
+public sealed class EnvironmentMutationCollection;
+
+[Collection("environment-mutation")]
 public class GitHubTokenProviderTests
 {
     [Fact]
