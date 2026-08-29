@@ -95,6 +95,15 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
             .EnumerateArray().Select(ParseProject).ToList();
     }
 
+    /// <summary>Login do usuário dono do token.</summary>
+    public async Task<string> GetViewerLoginAsync(CancellationToken ct = default)
+    {
+        var data = await graphQl.ExecuteAsync(
+            "query { viewer { login } }", null, "resolver o usuário do token", ct);
+        return data.GetProperty("viewer").GetProperty("login").GetString()
+            ?? throw new GitHubException("Não consegui resolver o usuário do token (viewer.login vazio).");
+    }
+
     /// <summary>Resolve o node id de um owner (organização ou usuário).</summary>
     public async Task<string> ResolveOwnerIdAsync(string login, CancellationToken ct = default)
     {

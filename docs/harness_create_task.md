@@ -10,6 +10,7 @@ harness_create_task(
   owner: string, repo: string, title: string, body: string,
   type?: "Task" | "Bug" | "Feature",   // default: "Task"
   storyPoints?: number,                 // omitir se ainda não há estimativa
+  assignees?: string[],                 // default: o usuário do token
   projectNumber?: number                // só se o repo tiver mais de um board
 )
 ```
@@ -25,11 +26,14 @@ harness_create_task(
    - **Não achou** → cria a Issue com o `type` informado.
 3. Adiciona ao Project, `Status = Backlog`, `Sprint` = sprint corrente (se
    houver) e `Story Points` (se informado).
+4. **Assignees**: define `assignees` (ou, sem eles, o usuário do token —
+   `viewer.login`). Na Issue nova vai já no `create`; numa Issue reaproveitada
+   só assina se **ninguém** estiver assinado (respeita atribuição manual).
 
 ## Saída
 
 Texto com: se criou ou reaproveitou, número/URL da Issue, número do Project
-+ id do item + `Status = Backlog`, e a sprint.
++ id do item + `Status = Backlog`, **Assignees** e a sprint.
 
 ## Notas
 

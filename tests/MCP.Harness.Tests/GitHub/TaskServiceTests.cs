@@ -45,6 +45,10 @@ public class TaskServiceTests
             var path = req.RequestUri!.AbsolutePath;
             var body = req.Body ?? "";
 
+            if (body.Contains("viewer { login }"))
+            {
+                return Ok("""{ "viewer": { "login": "semog-dev" } }""");
+            }
             if (path == "/repos/o/r/issues" && req.Method == HttpMethod.Get)
             {
                 return StubHttpMessageHandler.Json(HttpStatusCode.OK, "[]");
@@ -53,7 +57,7 @@ public class TaskServiceTests
             {
                 return StubHttpMessageHandler.Json(HttpStatusCode.Created, """
                     { "number": 20, "node_id": "I_new", "html_url": "https://github.com/o/r/issues/20",
-                      "state": "open", "title": "Nova task" }
+                      "state": "open", "title": "Nova task", "assignees": [ { "login": "semog-dev" } ] }
                     """);
             }
             if (body.Contains("projectsV2(first: 20)"))
@@ -80,10 +84,45 @@ public class TaskServiceTests
         Assert.Equal("PVTI_new", outcome.Item.Id);
         Assert.Equal("Sprint 1", outcome.Sprint!.Title);
 
-        Assert.Contains(handler.Requests, r => r.RequestUri!.AbsolutePath == "/repos/o/r/issues" && r.Method == HttpMethod.Post);
+        Assert.Equal(new[] { "semog-dev" }, outcome.Assignees);
+
+        var post = handler.Requests.Single(r => r.RequestUri!.AbsolutePath == "/repos/o/r/issues" && r.Method == HttpMethod.Post);
+        Assert.Contains("\"assignees\":[\"semog-dev\"]", post.Body);
         Assert.Contains(handler.Requests, r => r.Body?.Contains("\"singleSelectOptionId\":\"opt_backlog\"") == true);
         Assert.Contains(handler.Requests, r => r.Body?.Contains("\"iterationId\":\"it_1\"") == true);
         Assert.Contains(handler.Requests, r => r.Body?.Contains("\"number\":3") == true);
+    }
+
+    [Fact]
+    public async Task Explicit_assignees_override_the_default_viewer()
+    {
+        var service = Build(req =>
+        {
+            var path = req.RequestUri!.AbsolutePath;
+            var body = req.Body ?? "";
+            if (path == "/repos/o/r/issues" && req.Method == HttpMethod.Get)
+                return StubHttpMessageHandler.Json(HttpStatusCode.OK, "[]");
+            if (path == "/repos/o/r/issues" && req.Method == HttpMethod.Post)
+                return StubHttpMessageHandler.Json(HttpStatusCode.Created, """
+                    { "number": 20, "node_id": "I_new", "html_url": "u", "state": "open", "title": "T",
+                      "assignees": [ { "login": "alice" }, { "login": "bob" } ] }
+                    """);
+            if (body.Contains("projectsV2(first: 20)"))
+                return Ok($$"""{ "repository": { "projectsV2": { "nodes": [ {{Board}} ] } } }""");
+            if (body.Contains("addProjectV2ItemById"))
+                return Ok("""{ "addProjectV2ItemById": { "item": { "id": "PVTI_new" } } }""");
+            if (body.Contains("updateProjectV2ItemFieldValue"))
+                return Ok("""{ "updateProjectV2ItemFieldValue": { "projectV2Item": { "id": "PVTI_new" } } }""");
+            throw new InvalidOperationException($"{req.Method} {path} :: {body}");
+        }, out var handler);
+
+        var outcome = await service.CreateTaskAsync(
+            new RepoRef("o", "r"), "T", "corpo", assignees: ["@alice", "bob"]);
+
+        Assert.Equal(new[] { "alice", "bob" }, outcome.Assignees);
+        Assert.DoesNotContain(handler.Requests, r => r.Body?.Contains("viewer { login }") == true);
+        var post = handler.Requests.Single(r => r.RequestUri!.AbsolutePath == "/repos/o/r/issues" && r.Method == HttpMethod.Post);
+        Assert.Contains("\"assignees\":[\"alice\",\"bob\"]", post.Body);
     }
 
     [Fact]
@@ -98,7 +137,7 @@ public class TaskServiceTests
             {
                 return StubHttpMessageHandler.Json(HttpStatusCode.OK, """
                     [ { "number": 7, "node_id": "I_7", "html_url": "https://github.com/o/r/issues/7",
-                        "state": "open", "title": "  Nova Task  " } ]
+                        "state": "open", "title": "  Nova Task  ", "assignees": [ { "login": "carol" } ] } ]
                     """);
             }
             if (body.Contains("projectsV2(first: 20)"))
@@ -121,9 +160,12 @@ public class TaskServiceTests
         Assert.False(outcome.Created);
         Assert.Equal(7, outcome.Issue.Number);
         Assert.Equal("PVTI_7", outcome.Item.Id);
+        Assert.Equal(new[] { "carol" }, outcome.Assignees);
         Assert.DoesNotContain(handler.Requests, r =>
             r.RequestUri!.AbsolutePath == "/repos/o/r/issues" && r.Method == HttpMethod.Post);
         Assert.DoesNotContain(handler.Requests, r => r.Body?.Contains("addProjectV2ItemById") == true);
+        // Respeita atribuição manual: não reassina uma Issue que já tem assignee.
+        Assert.DoesNotContain(handler.Requests, r => r.RequestUri!.AbsolutePath.EndsWith("/assignees"));
     }
 
     [Fact]
@@ -134,10 +176,21 @@ public class TaskServiceTests
             var path = req.RequestUri!.AbsolutePath;
             var body = req.Body ?? "";
 
+            if (body.Contains("viewer { login }"))
+            {
+                return Ok("""{ "viewer": { "login": "semog-dev" } }""");
+            }
             if (path == "/repos/o/r/issues" && req.Method == HttpMethod.Get)
             {
                 return StubHttpMessageHandler.Json(HttpStatusCode.OK, """
                     [ { "number": 7, "node_id": "I_7", "html_url": "u", "state": "open", "title": "Nova task" } ]
+                    """);
+            }
+            if (path == "/repos/o/r/issues/7/assignees" && req.Method == HttpMethod.Post)
+            {
+                return StubHttpMessageHandler.Json(HttpStatusCode.Created, """
+                    { "number": 7, "node_id": "I_7", "html_url": "u", "state": "open", "title": "Nova task",
+                      "assignees": [ { "login": "semog-dev" } ] }
                     """);
             }
             if (body.Contains("projectsV2(first: 20)"))
@@ -164,7 +217,9 @@ public class TaskServiceTests
 
         Assert.False(outcome.Created);
         Assert.Equal("PVTI_7", outcome.Item.Id);
+        Assert.Equal(new[] { "semog-dev" }, outcome.Assignees);
         Assert.Contains(handler.Requests, r => r.Body?.Contains("addProjectV2ItemById") == true);
+        Assert.Contains(handler.Requests, r => r.RequestUri!.AbsolutePath == "/repos/o/r/issues/7/assignees");
         Assert.DoesNotContain(handler.Requests, r =>
             r.RequestUri!.AbsolutePath == "/repos/o/r/issues" && r.Method == HttpMethod.Post);
     }

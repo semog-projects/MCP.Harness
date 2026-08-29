@@ -11,9 +11,9 @@ public sealed class TaskTools
 {
     [McpServerTool(Name = "harness_create_task")]
     [Description(
-        "Cria uma Issue rastreada no board do repositório: adiciona ao Project, Status = Backlog e, " +
-        "se houver sprint corrente, também a Sprint. Antes de criar, procura uma Issue ABERTA com o " +
-        "mesmo título — se achar, devolve essa em vez de duplicar.")]
+        "Cria uma Issue rastreada no board do repositório: adiciona ao Project, Status = Backlog, " +
+        "Assignees e, se houver sprint corrente, também a Sprint. Antes de criar, procura uma Issue " +
+        "ABERTA com o mesmo título — se achar, devolve essa em vez de duplicar.")]
     public static Task<string> CreateTask(
         TaskService tasks,
         [Description("Owner do repositório (organização ou usuário).")] string owner,
@@ -22,12 +22,13 @@ public sealed class TaskTools
         [Description("Corpo da Issue: contexto do pedido, critérios de aceite, constraints.")] string body,
         [Description("Issue type: Task, Bug ou Feature. Default: Task.")] string? type = "Task",
         [Description("Estimativa em Story Points. Omita se ainda não há estimativa.")] double? storyPoints = null,
+        [Description("Logins para assinar a Issue. Vazio = o usuário do token.")] string[]? assignees = null,
         [Description("Número do Project, se o repo tiver mais de um board vinculado.")] int? projectNumber = null,
         CancellationToken cancellationToken = default)
         => ToolResult.GuardAsync(async () =>
         {
             var outcome = await tasks.CreateTaskAsync(
-                new RepoRef(owner, repo), title, body, type, storyPoints, projectNumber, cancellationToken);
+                new RepoRef(owner, repo), title, body, type, storyPoints, projectNumber, assignees, cancellationToken);
 
             var sb = new StringBuilder();
             sb.AppendLine(outcome.Created
@@ -35,6 +36,9 @@ public sealed class TaskTools
                 : $"ℹ️ Já existia uma Issue aberta com esse título: **#{outcome.Issue.Number}** — {outcome.Issue.Title} (não dupliquei)");
             sb.AppendLine($"URL: {outcome.Issue.Url}");
             sb.AppendLine($"Board: Project #{outcome.Project.Number} · item `{outcome.Item.Id}` · Status = Backlog");
+            sb.AppendLine(outcome.Assignees.Count > 0
+                ? $"Assignees: @{string.Join(", @", outcome.Assignees)}"
+                : "Assignees: — (nenhum login válido)");
             sb.AppendLine(outcome.Sprint is { } s
                 ? $"Sprint: {s.Title}"
                 : "Sprint: — (nenhuma iteração cobre hoje; campo não definido)");
