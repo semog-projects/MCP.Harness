@@ -90,4 +90,19 @@ public sealed class TaskTools
             return $"✅ #{issueNumber} concluída: Status = Done e Issue fechada (completed){note} " +
                    $"(Project #{outcome.Project.Number}, item `{outcome.Item.Id}`).";
         });
+
+    [McpServerTool(Name = "harness_board")]
+    [Description(
+        "Snapshot do board de um repositório para uma sprint (default: a sprint corrente), " +
+        "agrupado por Status e com a soma de Story Points por coluna.")]
+    public static Task<string> Board(
+        BoardService board,
+        [Description("Owner do repositório (organização ou usuário).")] string owner,
+        [Description("Nome do repositório.")] string repo,
+        [Description("Título da sprint. Vazio = sprint corrente; use \"(todas)\" via omissão para não filtrar.")] string? sprint = null,
+        [Description("Número do Project, se o repo tiver mais de um board vinculado.")] int? projectNumber = null,
+        CancellationToken cancellationToken = default)
+        => ToolResult.GuardAsync(async () =>
+            BoardView.ToMarkdown(await board.GetBoardAsync(
+                new RepoRef(owner, repo), sprint, projectNumber, cancellationToken)));
 }

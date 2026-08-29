@@ -250,6 +250,92 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
         return null;
     }
 
+    /// <summary>Lista todos os itens (Issues) do board, com Status / Sprint / Story Points.</summary>
+    public async Task<IReadOnlyList<BoardItem>> ListItemsAsync(HarnessProject project, CancellationToken ct = default)
+    {
+        const string query = """
+            query($id: ID!, $after: String) {
+              node(id: $id) {
+                ... on ProjectV2 {
+                  items(first: 100, after: $after) {
+                    pageInfo { hasNextPage endCursor }
+                    nodes {
+                      content {
+                        __typename
+                        ... on Issue {
+                          number title url state
+                          assignees(first: 10) { nodes { login } }
+                        }
+                      }
+                      status: fieldValueByName(name: "Status") {
+                        ... on ProjectV2ItemFieldSingleSelectValue { name }
+                      }
+                      sprint: fieldValueByName(name: "Sprint") {
+                        ... on ProjectV2ItemFieldIterationValue { title }
+                      }
+                      points: fieldValueByName(name: "Story Points") {
+                        ... on ProjectV2ItemFieldNumberValue { number }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """;
+
+        var items = new List<BoardItem>();
+        string? after = null;
+
+        do
+        {
+            var data = await graphQl.ExecuteAsync(
+                query, new { id = project.Id, after }, $"listar itens do Project #{project.Number}", ct);
+
+            var page = data.GetProperty("node").GetProperty("items");
+            foreach (var node in page.GetProperty("nodes").EnumerateArray())
+            {
+                var content = node.GetProperty("content");
+                if (content.ValueKind != JsonValueKind.Object
+                    || content.GetProperty("__typename").GetString() != "Issue")
+                {
+                    continue;
+                }
+
+                items.Add(new BoardItem(
+                    Number: content.GetProperty("number").GetInt32(),
+                    Title: content.GetProperty("title").GetString() ?? string.Empty,
+                    Url: content.GetProperty("url").GetString() ?? string.Empty,
+                    State: content.GetProperty("state").GetString()?.ToLowerInvariant() ?? "unknown",
+                    Status: TextOf(node, "status", "name"),
+                    Sprint: TextOf(node, "sprint", "title"),
+                    StoryPoints: NumberOf(node, "points"),
+                    Assignees: content.GetProperty("assignees").GetProperty("nodes").EnumerateArray()
+                        .Select(a => a.GetProperty("login").GetString() ?? string.Empty)
+                        .Where(login => login.Length > 0).ToList()));
+            }
+
+            var pageInfo = page.GetProperty("pageInfo");
+            after = pageInfo.GetProperty("hasNextPage").GetBoolean()
+                ? pageInfo.GetProperty("endCursor").GetString()
+                : null;
+        }
+        while (after is not null);
+
+        return items;
+    }
+
+    private static string? TextOf(JsonElement node, string property, string field)
+        => node.TryGetProperty(property, out var el) && el.ValueKind == JsonValueKind.Object
+           && el.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
+
+    private static double? NumberOf(JsonElement node, string property)
+        => node.TryGetProperty(property, out var el) && el.ValueKind == JsonValueKind.Object
+           && el.TryGetProperty("number", out var value) && value.ValueKind == JsonValueKind.Number
+            ? value.GetDouble()
+            : null;
+
     public async Task<ProjectItemRef> AddIssueAsync(
         HarnessProject project, string issueNodeId, CancellationToken ct = default)
     {

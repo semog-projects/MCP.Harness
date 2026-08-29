@@ -19,6 +19,7 @@ builder.Services.AddHarnessGitHub(builder.Configuration);
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithToolsFromAssembly();
+    .WithToolsFromAssembly()
+    .WithResourcesFromAssembly();
 
 await builder.Build().RunAsync();

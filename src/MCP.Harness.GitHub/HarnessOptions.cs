@@ -16,4 +16,21 @@ public sealed class HarnessOptions
 
     /// <summary>Nomes dos campos obrigatórios que o board precisa ter.</summary>
     public IReadOnlyList<string> RequiredFields { get; } = ["Status", "Sprint", "Story Points"];
+
+    /// <summary>
+    /// Repo padrão para o resource <c>harness://board/current</c> (que não
+    /// carrega owner/repo). Formato <c>owner/repo</c>. Vazio = o resource
+    /// pede para usar o template <c>harness://board/{owner}/{repo}</c>.
+    /// </summary>
+    public string? DefaultRepo { get; set; }
+
+    /// <summary>(owner, repo) a partir de <see cref="DefaultRepo"/>, ou <c>null</c>.</summary>
+    public (string Owner, string Repo)? DefaultRepoRef
+    {
+        get
+        {
+            var parts = DefaultRepo?.Split('/', 2, StringSplitOptions.TrimEntries);
+            return parts is [{ Length: > 0 } owner, { Length: > 0 } repo] ? (owner, repo) : null;
+        }
+    }
 }

@@ -36,6 +36,11 @@ public static class ServiceCollectionExtensions
             {
                 options.TemplateNumber = number;
             }
+
+            if (Environment.GetEnvironmentVariable("HARNESS_DEFAULT_REPO") is { Length: > 0 } defaultRepo)
+            {
+                options.DefaultRepo = defaultRepo;
+            }
         });
 
         services.TryAddSingleton<GitHubTokenProvider>();
@@ -50,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.TryAddTransient<GitHubClient>();
         services.TryAddTransient<BootstrapService>();
         services.TryAddTransient<TaskService>();
+        services.TryAddTransient<BoardService>();
 
         return services;
 
