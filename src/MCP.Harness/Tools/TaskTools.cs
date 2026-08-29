@@ -62,4 +62,32 @@ public sealed class TaskTools
             return $"✅ #{outcome.IssueNumber}: Status **{outcome.FromStatus} → {outcome.ToStatus}** " +
                    $"(Project #{outcome.Project.Number}, item `{outcome.Item.Id}`)";
         });
+
+    [McpServerTool(Name = "harness_complete_task")]
+    [Description(
+        "Conclui a task: Status = Done e fecha a Issue com state_reason = completed. " +
+        "Idempotente — numa Issue já fechada, só garante o Status = Done.")]
+    public static Task<string> CompleteTask(
+        TaskService tasks,
+        [Description("Owner do repositório (organização ou usuário).")] string owner,
+        [Description("Nome do repositório.")] string repo,
+        [Description("Número da Issue.")] int issueNumber,
+        [Description("Comentário opcional de encerramento, postado antes de fechar.")] string? comment = null,
+        [Description("Número do Project, se o repo tiver mais de um board vinculado.")] int? projectNumber = null,
+        CancellationToken cancellationToken = default)
+        => ToolResult.GuardAsync(async () =>
+        {
+            var outcome = await tasks.CompleteTaskAsync(
+                new RepoRef(owner, repo), issueNumber, comment, projectNumber, cancellationToken);
+
+            if (outcome.AlreadyCompleted)
+            {
+                return $"ℹ️ #{issueNumber} já estava fechada. Garanti o Status = Done " +
+                       $"(Project #{outcome.Project.Number}, item `{outcome.Item.Id}`).";
+            }
+
+            var note = outcome.Commented ? " · comentário postado" : string.Empty;
+            return $"✅ #{issueNumber} concluída: Status = Done e Issue fechada (completed){note} " +
+                   $"(Project #{outcome.Project.Number}, item `{outcome.Item.Id}`).";
+        });
 }
