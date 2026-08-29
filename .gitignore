@@ -5,6 +5,8 @@ obj/
 *.suo
 .vs/
 artifacts/
+.artifacts/
+publish/
 [Dd]ebug/
 [Rr]elease/
 *.nupkg
