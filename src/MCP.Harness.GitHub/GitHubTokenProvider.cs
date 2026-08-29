@@ -17,6 +17,9 @@ public sealed class GitHubTokenProvider(IOptions<GitHubOptions> options)
     private readonly GitHubOptions _options = options.Value;
     private string? _cached;
 
+    /// <summary>De onde o token foi resolvido na última chamada a <see cref="GetToken"/>.</summary>
+    public string? Source { get; private set; }
+
     public string GetToken()
     {
         if (_cached is { Length: > 0 })
@@ -28,10 +31,28 @@ public sealed class GitHubTokenProvider(IOptions<GitHubOptions> options)
         return _cached;
     }
 
+    /// <summary>
+    /// Descreve a fonte do token <b>sem expor o valor</b>: <c>"config (GitHub:Token)"</c>,
+    /// <c>"env GITHUB_TOKEN"</c>, <c>"env GH_TOKEN"</c>, <c>"gh CLI"</c> ou <c>"nenhuma"</c>.
+    /// </summary>
+    public string DescribeSource()
+    {
+        try
+        {
+            GetToken();
+            return Source ?? "nenhuma";
+        }
+        catch (GitHubAuthenticationException)
+        {
+            return "nenhuma";
+        }
+    }
+
     private string ResolveToken()
     {
         if (!string.IsNullOrWhiteSpace(_options.Token))
         {
+            Source = "config (GitHub:Token)";
             return _options.Token.Trim();
         }
 
@@ -40,15 +61,18 @@ public sealed class GitHubTokenProvider(IOptions<GitHubOptions> options)
             var fromEnv = Environment.GetEnvironmentVariable(name);
             if (!string.IsNullOrWhiteSpace(fromEnv))
             {
+                Source = $"env {name}";
                 return fromEnv.Trim();
             }
         }
 
         if (_options.AllowGhCliTokenFallback && TryReadGhCliToken(out var fromGh))
         {
+            Source = "gh CLI";
             return fromGh;
         }
 
+        Source = null;
         throw new GitHubAuthenticationException(
             "Nenhum token do GitHub encontrado. Defina GITHUB_TOKEN (PAT com escopos " +
             "'repo', 'project', 'read:org') ou rode 'gh auth login'.");

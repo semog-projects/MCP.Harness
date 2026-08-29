@@ -7,7 +7,13 @@ using Microsoft.Extensions.Logging;
 //
 // Transporte: stdio (padrão para clientes como o Claude Code). Todo log vai
 // para stderr — stdout é reservado ao protocolo MCP (JSON-RPC).
-var builder = Host.CreateApplicationBuilder(args);
+// ContentRoot no diretório do binário para que o appsettings.json seja
+// achado mesmo quando o servidor é iniciado de outro cwd (via .mcp.json).
+var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
+{
+    Args = args,
+    ContentRootPath = AppContext.BaseDirectory,
+});
 
 builder.Logging.AddConsole(options =>
 {

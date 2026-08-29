@@ -46,7 +46,7 @@ A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 | ----------------------------------- | ------ | -------------------------------------------------- |
 | `harness://board/{owner}/{repo}`    | ✅     | Snapshot JSON da sprint corrente do board do repo.  |
 | `harness://board/current`           | ✅     | Idem, para o repo padrão (`Harness:DefaultRepo`).   |
-| `harness://config`                  | 🔜     | Configuração efetiva (owner/número do template).    |
+| `harness://config`                  | ✅     | Configuração efetiva + fonte do token (sem o valor). |
 
 ## Stack
 
@@ -58,13 +58,21 @@ A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 
 ## Configuração
 
-Variáveis de ambiente:
+Duas fontes, nesta ordem de precedência: **variáveis de ambiente** →
+**`appsettings.json`** (ao lado do binário) → defaults.
 
-| Variável                  | Default           | Uso                                          |
-| ------------------------- | ----------------- | -------------------------------------------- |
-| `GITHUB_TOKEN`            | —                 | PAT com escopos `repo`, `project`, `read:org` |
-| `HARNESS_TEMPLATE_OWNER`  | `semog-projects`  | dono do Project-template v2 (`Harness:TemplateOwner`) |
-| `HARNESS_TEMPLATE_NUMBER` | `7`               | número do Project-template v2 (`Harness:TemplateNumber`) |
+| Env                       | Chave (`appsettings.json`) | Default            | Uso                                          |
+| ------------------------- | -------------------------- | ----------------- | -------------------------------------------- |
+| `GITHUB_TOKEN` / `GH_TOKEN` | `GitHub:Token`           | —                 | PAT com escopos `repo`, `project`, `read:org` |
+| —                         | `GitHub:RestBaseUrl`       | `https://api.github.com/` | base REST (troque para GitHub Enterprise) |
+| —                         | `GitHub:GraphQlUrl`        | `https://api.github.com/graphql` | endpoint GraphQL              |
+| `HARNESS_TEMPLATE_OWNER`  | `Harness:TemplateOwner`    | `semog-projects`  | dono do Project-template v2                   |
+| `HARNESS_TEMPLATE_NUMBER` | `Harness:TemplateNumber`   | `7`               | número do Project-template v2                 |
+| `HARNESS_DEFAULT_REPO`    | `Harness:DefaultRepo`      | —                 | `owner/repo` do resource `harness://board/current` |
+
+O token nunca é logado nem exposto. O resource **`harness://config`** mostra
+a configuração efetiva e a *fonte* do token (`env GITHUB_TOKEN`, `gh CLI`, …),
+nunca o valor. Ver [`docs/configuracao.md`](docs/configuracao.md).
 
 Tools já implementadas:
 [`harness_bootstrap`](docs/harness_bootstrap.md) (assinatura e diferenças
@@ -79,36 +87,82 @@ voltam como texto `❌ …` no resultado da tool, não como falha crua.
 
 ### Registrar no Claude Code
 
+**Durante o desenvolvimento** — `dotnet run`:
+
 ```jsonc
-// .mcp.json
+// .mcp.json (na raiz do repo que vai usar o harness)
 {
   "mcpServers": {
     "harness": {
       "command": "dotnet",
-      "args": ["run", "--project", "src/MCP.Harness/MCP.Harness.csproj"],
+      "args": ["run", "--project", "/caminho/para/MCP.Harness/src/MCP.Harness/MCP.Harness.csproj"],
       "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
     }
   }
 }
 ```
 
-Em produção, publique um binário (`dotnet publish -c Release`) e aponte
-`command` para o executável.
+**Em produção** — binário self-contained (não precisa de .NET instalado):
+
+```bash
+dotnet publish src/MCP.Harness/MCP.Harness.csproj -c Release \
+  -r linux-x64 --self-contained -o ~/.local/share/mcp-harness
+# RIDs: linux-x64 · osx-arm64 · win-x64
+```
+
+```jsonc
+// .mcp.json
+{
+  "mcpServers": {
+    "harness": {
+      "command": "/home/voce/.local/share/mcp-harness/mcp-harness",
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+O `appsettings.json` publicado ao lado do binário pode carregar
+`Harness:TemplateOwner`, `Harness:DefaultRepo`, etc. sem env vars.
+
+### Passo a passo num repo novo
+
+1. Gere um PAT com escopos `repo`, `project`, `read:org` → `export GITHUB_TOKEN=…`.
+2. Adicione o `.mcp.json` acima na raiz do repo.
+3. Rode o harness uma vez: tool `harness_bootstrap` com `owner`/`repo` do repo
+   novo — cria o Project v2 e vincula.
+4. A partir daí, `harness_create_task` / `harness_move_task` /
+   `harness_complete_task` / `harness_board`.
+
+## Troubleshooting
+
+| Sintoma                                                        | Causa provável / correção                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `❌ … token sem permissão` / `token inválido ou expirado`      | PAT sem escopo `project` ou `read:org`, ou expirado. Gere outro.          |
+| `❌ … rate limit do GitHub atingido`                          | Espere o horário do reset informado na mensagem.                          |
+| `❌ Nenhum Project v2 vinculado a …`                          | Rode `harness_bootstrap` primeiro.                                        |
+| `❌ … template #7 … pode estar desconfigurado`               | `HARNESS_TEMPLATE_OWNER`/`NUMBER` apontam para um Project sem os campos padrão. |
+| `❌ Issue #N não está no board`                              | Use `harness_create_task` (ou adicione a Issue ao Project na UI).          |
+| Nenhum token encontrado                                       | `export GITHUB_TOKEN=…`, ou `gh auth login`, ou preencha `GitHub:Token`.   |
+| `harness://board/current` devolve `{ "error": … }`           | Defina `HARNESS_DEFAULT_REPO=owner/repo` ou use `harness://board/{owner}/{repo}`. |
 
 ## Desenvolvimento
 
 ```bash
 dotnet build
-dotnet test
+dotnet test                                    # unidade
+HARNESS_IT=1 GITHUB_TOKEN=$(gh auth token) \
+  dotnet test --filter Category=Integration    # ponta-a-ponta (GitHub real)
 dotnet run --project src/MCP.Harness
 ```
 
-## Estrutura (planejada)
+## Estrutura
 
 ```
-src/MCP.Harness/           # host do servidor MCP + definição das tools
-src/MCP.Harness.GitHub/    # cliente GitHub (GraphQL Projects v2 + REST Issues)
+src/MCP.Harness/           # host do servidor MCP: tools, resources, appsettings.json
+src/MCP.Harness.GitHub/    # cliente GitHub (GraphQL Projects v2 + REST Issues) + serviços do harness
 tests/MCP.Harness.Tests/   # testes de unidade e integração
+docs/                      # uma página por tool + configuracao.md
 scripts/bootstrap.sh       # script legado — referência para a tool harness_bootstrap
 ```
 
