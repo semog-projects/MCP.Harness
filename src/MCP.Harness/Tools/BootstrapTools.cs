@@ -14,16 +14,14 @@ public sealed class BootstrapTools
         "Cria o board (GitHub Project v2) de um repositório a partir do template padronizado " +
         "do harness (campos Status/Sprint/Story Points) e o vincula ao repo. Idempotente: se já " +
         "houver board vinculado, apenas reporta o estado atual. Equivale ao scripts/bootstrap.sh.")]
-    public static async Task<string> Bootstrap(
+    public static Task<string> Bootstrap(
         BootstrapService bootstrap,
         [Description("Owner do repositório alvo (organização ou usuário).")] string owner,
         [Description("Nome do repositório alvo.")] string repo,
         [Description("Título do Project. Default: \"<repo> Sprints\".")] string? title = null,
         CancellationToken cancellationToken = default)
-    {
-        var result = await bootstrap.BootstrapAsync(new RepoRef(owner, repo), title, cancellationToken);
-        return Format(result);
-    }
+        => ToolResult.GuardAsync(async () =>
+            Format(await bootstrap.BootstrapAsync(new RepoRef(owner, repo), title, cancellationToken)));
 
     private static string Format(BootstrapResult result)
     {

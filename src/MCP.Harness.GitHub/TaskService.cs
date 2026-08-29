@@ -12,12 +12,41 @@ public sealed record CreateTaskOutcome(
     HarnessProject Project,
     ProjectIteration? Sprint);
 
+/// <summary>Resultado de <see cref="TaskService.MoveTaskAsync"/>.</summary>
+public sealed record MoveTaskOutcome(
+    HarnessProject Project, ProjectItemRef Item, int IssueNumber, string FromStatus, string ToStatus);
+
 /// <summary>
-/// Passo 2 do ciclo de vida do harness: transformar um pedido de trabalho em
-/// Issue rastreada no board (<c>Status = Backlog</c>, sprint corrente).
+/// Passos 2 e 3 do ciclo de vida do harness: criar a task e mover o
+/// <c>Status</c> conforme o trabalho progride.
 /// </summary>
 public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, IssuesClient issues)
 {
+    /// <summary>
+    /// Move o <c>Status</c> da task da Issue <paramref name="issueNumber"/>.
+    /// Não fecha a Issue quando o alvo é <c>Done</c> — isso é
+    /// <c>harness_complete_task</c>.
+    /// </summary>
+    public async Task<MoveTaskOutcome> MoveTaskAsync(
+        RepoRef repo, int issueNumber, string status, int? projectNumber = null, CancellationToken ct = default)
+    {
+        var project = await projects.ResolveProjectAsync(repo, projectNumber, ct);
+        var statusField = project.Status;
+
+        var option = statusField.FindOption(status?.Trim() ?? string.Empty)
+            ?? throw new GitHubException(
+                $"Status '{status}' inválido. Opções: {string.Join(", ", statusField.Options.Select(o => o.Name))}.");
+
+        var item = await projects.FindItemByIssueAsync(project, repo, issueNumber, ct)
+            ?? throw new GitHubException(
+                $"Issue #{issueNumber} não está no board (Project #{project.Number}). Rode harness_create_task primeiro.");
+
+        var from = await projects.GetSingleSelectValueAsync(item, statusField.Name, ct) ?? "—";
+        await projects.SetSingleSelectAsync(project, item, statusField, option.Id, ct);
+
+        return new MoveTaskOutcome(project, item, issueNumber, from, option.Name);
+    }
+
     public async Task<CreateTaskOutcome> CreateTaskAsync(
         RepoRef repo,
         string title,
