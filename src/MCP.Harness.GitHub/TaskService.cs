@@ -16,6 +16,14 @@ public sealed record CreateTaskOutcome(
 public sealed record MoveTaskOutcome(
     HarnessProject Project, ProjectItemRef Item, int IssueNumber, string FromStatus, string ToStatus);
 
+/// <summary>Resultado de <see cref="TaskService.CompleteTaskAsync"/>.</summary>
+/// <param name="AlreadyCompleted">
+/// <c>true</c> se a Issue já estava fechada quando a tool rodou (só garantiu
+/// o <c>Status = Done</c>).
+/// </param>
+public sealed record CompleteTaskOutcome(
+    HarnessProject Project, ProjectItemRef Item, IssueRef Issue, bool AlreadyCompleted, bool Commented);
+
 /// <summary>
 /// Passos 2 e 3 do ciclo de vida do harness: criar a task e mover o
 /// <c>Status</c> conforme o trabalho progride.
@@ -45,6 +53,46 @@ public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, 
         await projects.SetSingleSelectAsync(project, item, statusField, option.Id, ct);
 
         return new MoveTaskOutcome(project, item, issueNumber, from, option.Name);
+    }
+
+    /// <summary>
+    /// Passo 4: conclui a task — <c>Status = Done</c> e fecha a Issue
+    /// (<c>state_reason = completed</c>). Idempotente: se a Issue já estiver
+    /// fechada, só garante o <c>Status = Done</c> e não recomenta nem
+    /// re-fecha.
+    /// </summary>
+    public async Task<CompleteTaskOutcome> CompleteTaskAsync(
+        RepoRef repo, int issueNumber, string? comment = null, int? projectNumber = null, CancellationToken ct = default)
+    {
+        var project = await projects.ResolveProjectAsync(repo, projectNumber, ct);
+        var doneOption = project.Status.FindOption("Done")
+            ?? throw new GitHubException(
+                $"O campo 'Status' do Project #{project.Number} não tem a opção 'Done'.");
+
+        var item = await projects.FindItemByIssueAsync(project, repo, issueNumber, ct)
+            ?? throw new GitHubException(
+                $"Issue #{issueNumber} não está no board (Project #{project.Number}). Rode harness_create_task primeiro.");
+
+        var issue = await issues.GetAsync(repo, issueNumber, ct);
+        var alreadyClosed = string.Equals(issue.State, "closed", StringComparison.OrdinalIgnoreCase);
+
+        // Status = Done sempre (barato e idempotente).
+        await projects.SetSingleSelectAsync(project, item, project.Status, doneOption.Id, ct);
+
+        if (alreadyClosed)
+        {
+            return new CompleteTaskOutcome(project, item, issue, AlreadyCompleted: true, Commented: false);
+        }
+
+        var commented = false;
+        if (!string.IsNullOrWhiteSpace(comment))
+        {
+            await issues.AddCommentAsync(repo, issueNumber, comment.Trim(), ct);
+            commented = true;
+        }
+
+        var closed = await issues.CloseAsync(repo, issueNumber, "completed", ct);
+        return new CompleteTaskOutcome(project, item, closed, AlreadyCompleted: false, commented);
     }
 
     public async Task<CreateTaskOutcome> CreateTaskAsync(
