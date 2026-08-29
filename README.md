@@ -1,0 +1,122 @@
+# MCP.Harness
+
+Servidor **MCP (Model Context Protocol)** em **.NET 10** que expõe o *sprint
+harness* de engenharia como ferramentas para qualquer cliente MCP (Claude
+Code, IDEs, agentes). Em vez de depender de scripts soltos (`bootstrap.sh`) e
+de convenções que vivem apenas no `CLAUDE.md`, o MCP.Harness entrega o ciclo
+de vida de tarefas — bootstrap do board, criação de Issues e transição de
+Status — como *tools* versionadas, testáveis e reaproveitáveis entre repos.
+
+## Contexto — o que é o sprint harness
+
+O harness organiza todo trabalho não-trivial em torno de um **GitHub Project
+(v2)** por repositório, com campos padronizados:
+
+| Campo          | Tipo            | Valores                              |
+| -------------- | --------------- | ------------------------------------ |
+| `Status`       | single select   | `Backlog`, `Todo`, `Doing`, `Done`   |
+| `Sprint`       | iteration       | ciclo/iteração atual (14 dias)       |
+| `Story Points` | number          | estimativa de esforço                |
+
+Ciclo de vida de uma task:
+
+1. **Criação** — Issue real + item no Project, `Status = Backlog`.
+2. **Início** — `Status = Todo` e, ao começar de fato, `Status = Doing`.
+3. **Execução** — commits referenciam a Issue (`refs #N` / `Closes #N`).
+4. **Conclusão** — `Status = Done` e Issue fechada. Trabalho interrompido
+   fica em `Doing` com o estado registrado no corpo da Issue.
+
+A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
+
+## O que o servidor expõe (visão alvo)
+
+### Tools
+
+| Tool                   | Descrição                                                                              |
+| ---------------------- | ------------------------------------------------------------------------------------- |
+| `harness_bootstrap`    | Cria o Project v2 a partir do template padronizado e vincula ao repo (porta do `bootstrap.sh`). |
+| `harness_create_task`  | Cria a Issue, adiciona ao Project, define `Status = Backlog` e a `Sprint` atual.       |
+| `harness_move_task`    | Move o `Status` de um item (`Todo` / `Doing` / `Done`).                                |
+| `harness_complete_task`| Define `Status = Done` e fecha a Issue com `state_reason = completed`.                  |
+| `harness_board`        | Lê os itens da sprint atual, com `Status`, `Story Points` e link da Issue.             |
+
+### Resources
+
+| Resource                   | Conteúdo                                            |
+| -------------------------- | -------------------------------------------------- |
+| `harness://board/current`  | Snapshot em JSON do board da sprint corrente.       |
+| `harness://config`         | Configuração efetiva (owner/número do template).    |
+
+## Stack
+
+- **.NET 10** / C#
+- SDK oficial [`ModelContextProtocol`](https://github.com/modelcontextprotocol/csharp-sdk) para C#
+- Transporte **stdio** (padrão para Claude Code); HTTP/SSE opcional
+- Acesso ao GitHub via **GraphQL** (Projects v2) + **REST** (Issues),
+  autenticando com PAT (`GITHUB_TOKEN`) ou com o token do `gh` CLI
+
+## Configuração
+
+Variáveis de ambiente:
+
+| Variável                  | Default           | Uso                                          |
+| ------------------------- | ----------------- | -------------------------------------------- |
+| `GITHUB_TOKEN`            | —                 | PAT com escopos `repo`, `project`, `read:org` |
+| `HARNESS_TEMPLATE_OWNER`  | `semog-projects`  | dono do Project-template v2                   |
+| `HARNESS_TEMPLATE_NUMBER` | `7`               | número do Project-template v2                 |
+
+### Registrar no Claude Code
+
+```jsonc
+// .mcp.json
+{
+  "mcpServers": {
+    "harness": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/MCP.Harness/MCP.Harness.csproj"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+Em produção, publique um binário (`dotnet publish -c Release`) e aponte
+`command` para o executável.
+
+## Desenvolvimento
+
+```bash
+dotnet build
+dotnet test
+dotnet run --project src/MCP.Harness
+```
+
+## Estrutura (planejada)
+
+```
+src/MCP.Harness/           # host do servidor MCP + definição das tools
+src/MCP.Harness.GitHub/    # cliente GitHub (GraphQL Projects v2 + REST Issues)
+tests/MCP.Harness.Tests/   # testes de unidade e integração
+scripts/bootstrap.sh       # script legado — referência para a tool harness_bootstrap
+```
+
+## Relação com o `bootstrap.sh`
+
+`scripts/bootstrap.sh` copia um Project-template v2 (com os campos
+`Status` / `Sprint` / `Story Points` já configurados) para um novo owner e
+vincula ao repositório, usando o `gh` CLI. A tool `harness_bootstrap`
+replica exatamente esse fluxo pela API do GitHub, sem depender do `gh`
+instalado na máquina do cliente:
+
+1. `gh project copy <template> --source-owner … --target-owner …`
+   → mutation `copyProjectV2`
+2. `gh project link <n> --owner … --repo …`
+   → mutation `linkProjectV2ToRepository`
+3. valida o campo `Sprint` (iteration) e reporta o calendário de ciclos.
+
+## Roadmap
+
+**Sprint 1 (atual)** — fundação: scaffold do projeto, camada de acesso ao
+GitHub, tool de bootstrap e CRUD de tasks.
+
+Board: <https://github.com/orgs/semog-projects/projects/9>

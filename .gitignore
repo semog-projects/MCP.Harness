@@ -1,0 +1,18 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+*.nupkg
+
+# Rider / VS Code
+.idea/
+.vscode/
+
+# Ambiente
+*.env
+.env
