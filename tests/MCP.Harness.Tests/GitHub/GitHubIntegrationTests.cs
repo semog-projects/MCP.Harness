@@ -50,6 +50,7 @@ public class GitHubIntegrationTests
         {
             Assert.True(first.Created);
             Assert.Equal("Backlog", await StatusOf(graphQl, first));
+            Assert.NotEmpty(first.Assignees); // default = usuário do token
 
             // A listagem REST do GitHub pode levar alguns segundos para
             // refletir a Issue recém-criada. Espera ela aparecer antes de

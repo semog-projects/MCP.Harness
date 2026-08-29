@@ -35,7 +35,7 @@ A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 | Tool                   | Estado | Descrição                                                                     |
 | ---------------------- | ------ | --------------------------------------------------------------------------- |
 | `harness_bootstrap`    | ✅     | Cria o Project v2 a partir do template padronizado e vincula ao repo (porta do `bootstrap.sh`). |
-| `harness_create_task`  | ✅     | Cria a Issue, adiciona ao Project, `Status = Backlog` e a `Sprint` atual. Dedup por título. |
+| `harness_create_task`  | ✅     | Cria a Issue, adiciona ao Project, `Status = Backlog`, `Sprint` atual e `Assignees` (default: usuário do token). Dedup por título. |
 | `harness_move_task`    | ✅     | Move o `Status` de um item (`Backlog` / `Todo` / `Doing` / `Done`); valida a opção. |
 | `harness_complete_task`| ✅     | Define `Status = Done` e fecha a Issue com `state_reason = completed`. Idempotente. |
 | `harness_board`        | ✅     | Snapshot da sprint (default: corrente), agrupado por `Status` com soma de `Story Points`. |

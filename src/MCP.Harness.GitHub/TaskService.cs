@@ -10,7 +10,8 @@ public sealed record CreateTaskOutcome(
     IssueRef Issue,
     ProjectItemRef Item,
     HarnessProject Project,
-    ProjectIteration? Sprint);
+    ProjectIteration? Sprint,
+    IReadOnlyList<string> Assignees);
 
 /// <summary>Resultado de <see cref="TaskService.MoveTaskAsync"/>.</summary>
 public sealed record MoveTaskOutcome(
@@ -95,6 +96,11 @@ public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, 
         return new CompleteTaskOutcome(project, item, closed, AlreadyCompleted: false, commented);
     }
 
+    /// <param name="assignees">
+    /// Logins a assinar na Issue. <c>null</c>/vazio → o usuário do token. Passe
+    /// uma lista vazia via <see cref="Array.Empty{T}"/> só se quiser mesmo sem
+    /// ninguém — mas o board espera Assignees preenchido.
+    /// </param>
     public async Task<CreateTaskOutcome> CreateTaskAsync(
         RepoRef repo,
         string title,
@@ -102,6 +108,7 @@ public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, 
         string? type = null,
         double? storyPoints = null,
         int? projectNumber = null,
+        IReadOnlyList<string>? assignees = null,
         CancellationToken ct = default)
     {
         title = title.Trim();
@@ -113,6 +120,14 @@ public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, 
         var project = await projects.ResolveProjectAsync(repo, projectNumber, ct);
         var sprint = project.Field("Sprint")?.CurrentIteration(DateOnly.FromDateTime(DateTime.UtcNow));
 
+        var explicitAssignees = assignees is { Count: > 0 }
+            ? assignees.Select(a => a.Trim().TrimStart('@')).Where(a => a.Length > 0).Distinct().ToList()
+            : null;
+
+        // Só resolve o usuário do token se for mesmo preciso assinar.
+        async Task<IReadOnlyList<string>> WantedAssignees() =>
+            explicitAssignees ?? [await projects.GetViewerLoginAsync(ct)];
+
         var existing = await issues.FindOpenByExactTitleAsync(repo, title, ct);
         if (existing is not null)
         {
@@ -121,12 +136,18 @@ public sealed class TaskService(GitHubClient github, ProjectsV2Client projects, 
             var item = await projects.FindItemByIssueAsync(project, repo, existing.Number, ct)
                        ?? await github.PlaceOnBoardAsync(project, existing, "Backlog", sprint?.Id, storyPoints, ct);
 
-            return new CreateTaskOutcome(Created: false, existing, item, project, sprint);
+            // Só assina se ninguém estiver assinado — respeita atribuições manuais.
+            var final = existing.Assignees.Count == 0
+                ? await issues.AddAssigneesAsync(repo, existing.Number, await WantedAssignees(), ct)
+                : existing;
+
+            return new CreateTaskOutcome(Created: false, final, item, project, sprint, final.Assignees);
         }
 
-        var issue = await issues.CreateAsync(repo, title, body, type, ct: ct);
+        var issue = await issues.CreateAsync(
+            repo, title, body, type, assignees: await WantedAssignees(), ct: ct);
         var newItem = await github.PlaceOnBoardAsync(project, issue, "Backlog", sprint?.Id, storyPoints, ct);
 
-        return new CreateTaskOutcome(Created: true, issue, newItem, project, sprint);
+        return new CreateTaskOutcome(Created: true, issue, newItem, project, sprint, issue.Assignees);
     }
 }

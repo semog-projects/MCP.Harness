@@ -14,7 +14,8 @@ public sealed class IssuesClient(HttpClient http)
     /// </param>
     public async Task<IssueRef> CreateAsync(
         RepoRef repo, string title, string body, string? type = null,
-        IReadOnlyList<string>? labels = null, CancellationToken ct = default)
+        IReadOnlyList<string>? labels = null, IReadOnlyList<string>? assignees = null,
+        CancellationToken ct = default)
     {
         var payload = new Dictionary<string, object?>
         {
@@ -29,10 +30,29 @@ public sealed class IssuesClient(HttpClient http)
         {
             payload["labels"] = labels;
         }
+        if (assignees is { Count: > 0 })
+        {
+            payload["assignees"] = assignees;
+        }
 
         using var response = await http.PostAsJsonAsync(
             $"repos/{repo.Owner}/{repo.Repo}/issues", payload, JsonOptions, ct);
         await GitHubResponse.EnsureSuccessAsync(response, $"criar Issue em {repo}", ct);
+
+        return await ReadIssueAsync(response, ct);
+    }
+
+    /// <summary>
+    /// Adiciona assignees a uma Issue. Idempotente — quem já está assinado é
+    /// ignorado pelo GitHub. Logins inválidos são silenciosamente descartados.
+    /// </summary>
+    public async Task<IssueRef> AddAssigneesAsync(
+        RepoRef repo, int number, IReadOnlyList<string> assignees, CancellationToken ct = default)
+    {
+        using var response = await http.PostAsJsonAsync(
+            $"repos/{repo.Owner}/{repo.Repo}/issues/{number}/assignees",
+            new { assignees }, JsonOptions, ct);
+        await GitHubResponse.EnsureSuccessAsync(response, $"assinar a Issue #{number} em {repo}", ct);
 
         return await ReadIssueAsync(response, ct);
     }
@@ -77,12 +97,7 @@ public sealed class IssuesClient(HttpClient http)
 
                 if (string.Equals(item.GetProperty("title").GetString()?.Trim(), wanted, StringComparison.OrdinalIgnoreCase))
                 {
-                    return new IssueRef(
-                        item.GetProperty("number").GetInt32(),
-                        item.GetProperty("node_id").GetString() ?? throw MissingField("node_id"),
-                        item.GetProperty("html_url").GetString() ?? throw MissingField("html_url"),
-                        item.GetProperty("state").GetString() ?? "open",
-                        item.GetProperty("title").GetString() ?? string.Empty);
+                    return ReadIssue(item);
                 }
             }
 
@@ -130,15 +145,20 @@ public sealed class IssuesClient(HttpClient http)
     private static async Task<IssueRef> ReadIssueAsync(HttpResponseMessage response, CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-        var root = doc.RootElement;
-
-        return new IssueRef(
-            Number: root.GetProperty("number").GetInt32(),
-            NodeId: root.GetProperty("node_id").GetString() ?? throw MissingField("node_id"),
-            Url: root.GetProperty("html_url").GetString() ?? throw MissingField("html_url"),
-            State: root.GetProperty("state").GetString() ?? "unknown",
-            Title: root.GetProperty("title").GetString() ?? string.Empty);
+        return ReadIssue(doc.RootElement);
     }
+
+    private static IssueRef ReadIssue(JsonElement issue) => new(
+        Number: issue.GetProperty("number").GetInt32(),
+        NodeId: issue.GetProperty("node_id").GetString() ?? throw MissingField("node_id"),
+        Url: issue.GetProperty("html_url").GetString() ?? throw MissingField("html_url"),
+        State: issue.GetProperty("state").GetString() ?? "unknown",
+        Title: issue.GetProperty("title").GetString() ?? string.Empty,
+        Assignees: issue.TryGetProperty("assignees", out var a) && a.ValueKind == JsonValueKind.Array
+            ? a.EnumerateArray()
+                .Select(x => x.TryGetProperty("login", out var l) ? l.GetString() ?? string.Empty : string.Empty)
+                .Where(login => login.Length > 0).ToList()
+            : []);
 
     private static GitHubException MissingField(string name) =>
         new($"Resposta do GitHub sem o campo esperado '{name}'.");

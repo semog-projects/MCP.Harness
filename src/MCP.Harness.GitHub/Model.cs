@@ -7,7 +7,14 @@ public readonly record struct RepoRef(string Owner, string Repo)
 }
 
 /// <summary>Issue recém-criada ou atualizada (subconjunto do payload REST).</summary>
-public sealed record IssueRef(int Number, string NodeId, string Url, string State, string Title);
+public sealed record IssueRef(
+    int Number, string NodeId, string Url, string State, string Title, IReadOnlyList<string> Assignees)
+{
+    public IssueRef(int number, string nodeId, string url, string state, string title)
+        : this(number, nodeId, url, state, title, [])
+    {
+    }
+}
 
 /// <summary>Tipo de campo do Project v2 que o harness conhece.</summary>
 public enum ProjectFieldType
