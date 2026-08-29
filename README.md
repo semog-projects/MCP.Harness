@@ -36,7 +36,7 @@ A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 | ---------------------- | ------ | --------------------------------------------------------------------------- |
 | `harness_bootstrap`    | ✅     | Cria o Project v2 a partir do template padronizado e vincula ao repo (porta do `bootstrap.sh`). |
 | `harness_create_task`  | ✅     | Cria a Issue, adiciona ao Project, `Status = Backlog` e a `Sprint` atual. Dedup por título. |
-| `harness_move_task`    | 🔜     | Move o `Status` de um item (`Todo` / `Doing` / `Done`).                       |
+| `harness_move_task`    | ✅     | Move o `Status` de um item (`Backlog` / `Todo` / `Doing` / `Done`); valida a opção. |
 | `harness_complete_task`| 🔜     | Define `Status = Done` e fecha a Issue com `state_reason = completed`.         |
 | `harness_board`        | 🔜     | Lê os itens da sprint atual, com `Status`, `Story Points` e link da Issue.     |
 
@@ -67,8 +67,12 @@ Variáveis de ambiente:
 
 Tools já implementadas:
 [`harness_bootstrap`](docs/harness_bootstrap.md) (assinatura e diferenças
-vs `scripts/bootstrap.sh`) e
-[`harness_create_task`](docs/harness_create_task.md).
+vs `scripts/bootstrap.sh`),
+[`harness_create_task`](docs/harness_create_task.md) e
+[`harness_move_task`](docs/harness_move_task.md).
+
+Erros de domínio (status inválido, Issue fora do board, token sem escopo…)
+voltam como texto `❌ …` no resultado da tool, não como falha crua.
 
 ### Registrar no Claude Code
 

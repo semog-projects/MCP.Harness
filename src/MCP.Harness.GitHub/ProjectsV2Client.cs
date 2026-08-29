@@ -286,6 +286,35 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
         HarnessProject project, ProjectItemRef item, ProjectField field, string optionId, CancellationToken ct = default)
         => UpdateFieldAsync(project, item, field, new { singleSelectOptionId = optionId }, ct);
 
+    /// <summary>Lê o valor atual de um campo single-select do item, ou <c>null</c> se não definido.</summary>
+    public async Task<string?> GetSingleSelectValueAsync(
+        ProjectItemRef item, string fieldName, CancellationToken ct = default)
+    {
+        const string query = """
+            query($id: ID!, $field: String!) {
+              node(id: $id) {
+                ... on ProjectV2Item {
+                  fieldValueByName(name: $field) {
+                    ... on ProjectV2ItemFieldSingleSelectValue { name }
+                  }
+                }
+              }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { id = item.Id, field = fieldName }, $"ler campo '{fieldName}' do item", ct);
+
+        var node = data.GetProperty("node");
+        if (node.ValueKind == JsonValueKind.Null || !node.TryGetProperty("fieldValueByName", out var value)
+            || value.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return value.TryGetProperty("name", out var name) ? name.GetString() : null;
+    }
+
     public Task SetIterationAsync(
         HarnessProject project, ProjectItemRef item, ProjectField field, string iterationId, CancellationToken ct = default)
         => UpdateFieldAsync(project, item, field, new { iterationId }, ct);
