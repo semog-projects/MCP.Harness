@@ -79,3 +79,6 @@ public sealed record HarnessProject(string Id, int Number, string Title, string 
 }
 
 public sealed record ProjectItemRef(string Id);
+
+/// <summary>Project recém-copiado de um template (antes de resolver os campos).</summary>
+public sealed record CopiedProject(string Id, int Number, string Title, string Url);

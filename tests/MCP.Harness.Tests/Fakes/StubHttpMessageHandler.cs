@@ -3,7 +3,7 @@ using System.Net;
 namespace MCP.Harness.Tests.Fakes;
 
 /// <summary>Responde cada requisição com o resultado de um delegate.</summary>
-public sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder)
+public sealed class StubHttpMessageHandler(Func<CapturedRequest, HttpResponseMessage> responder)
     : HttpMessageHandler
 {
     /// <summary>
@@ -17,9 +17,10 @@ public sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponse
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-        Requests.Add(new CapturedRequest(request.Method, request.RequestUri, body));
+        var captured = new CapturedRequest(request.Method, request.RequestUri, body);
+        Requests.Add(captured);
 
-        return responder(request);
+        return responder(captured);
     }
 
     public static HttpResponseMessage Json(HttpStatusCode status, string body, params (string Name, string Value)[] headers)

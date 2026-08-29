@@ -62,8 +62,12 @@ Variáveis de ambiente:
 | Variável                  | Default           | Uso                                          |
 | ------------------------- | ----------------- | -------------------------------------------- |
 | `GITHUB_TOKEN`            | —                 | PAT com escopos `repo`, `project`, `read:org` |
-| `HARNESS_TEMPLATE_OWNER`  | `semog-projects`  | dono do Project-template v2                   |
-| `HARNESS_TEMPLATE_NUMBER` | `7`               | número do Project-template v2                 |
+| `HARNESS_TEMPLATE_OWNER`  | `semog-projects`  | dono do Project-template v2 (`Harness:TemplateOwner`) |
+| `HARNESS_TEMPLATE_NUMBER` | `7`               | número do Project-template v2 (`Harness:TemplateNumber`) |
+
+A tool `harness_bootstrap` já está implementada — ver
+[`docs/harness_bootstrap.md`](docs/harness_bootstrap.md) para a assinatura e
+as diferenças em relação ao `scripts/bootstrap.sh`.
 
 ### Registrar no Claude Code
 

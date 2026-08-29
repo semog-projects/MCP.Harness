@@ -16,11 +16,27 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddHarnessGitHub(
         this IServiceCollection services, IConfiguration? configuration = null)
     {
-        var optionsBuilder = services.AddOptions<GitHubOptions>();
+        var gitHubOptions = services.AddOptions<GitHubOptions>();
+        var harnessOptions = services.AddOptions<HarnessOptions>();
         if (configuration is not null)
         {
-            optionsBuilder.Bind(configuration.GetSection(GitHubOptions.SectionName));
+            gitHubOptions.Bind(configuration.GetSection(GitHubOptions.SectionName));
+            harnessOptions.Bind(configuration.GetSection(HarnessOptions.SectionName));
         }
+
+        // Atalhos por variável de ambiente (paridade com o bootstrap.sh).
+        harnessOptions.PostConfigure(static options =>
+        {
+            if (Environment.GetEnvironmentVariable("HARNESS_TEMPLATE_OWNER") is { Length: > 0 } owner)
+            {
+                options.TemplateOwner = owner;
+            }
+
+            if (int.TryParse(Environment.GetEnvironmentVariable("HARNESS_TEMPLATE_NUMBER"), out var number))
+            {
+                options.TemplateNumber = number;
+            }
+        });
 
         services.TryAddSingleton<GitHubTokenProvider>();
         services.TryAddTransient<GitHubAuthHandler>();
@@ -32,6 +48,7 @@ public static class ServiceCollectionExtensions
         // ser capturados por um singleton sob risco de reter handlers.
         services.TryAddTransient<ProjectsV2Client>();
         services.TryAddTransient<GitHubClient>();
+        services.TryAddTransient<BootstrapService>();
 
         return services;
 
