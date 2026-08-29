@@ -87,7 +87,39 @@ voltam como texto `❌ …` no resultado da tool, não como falha crua.
 
 ### Registrar no Claude Code
 
-**Durante o desenvolvimento** — `dotnet run`:
+**Consumir sem clonar o repo** — pacote NuGet via `dnx` (precisa do .NET 10 SDK):
+
+```jsonc
+// .mcp.json (na raiz do repo que vai usar o harness)
+{
+  "mcpServers": {
+    "harness": {
+      "command": "dotnet",
+      "args": ["dnx", "MCP.Harness", "--yes"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+**Sem .NET na máquina** — imagem de container (GHCR):
+
+```jsonc
+{
+  "mcpServers": {
+    "harness": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "GITHUB_TOKEN",
+               "ghcr.io/semog-projects/mcp-harness:latest"]
+    }
+  }
+}
+```
+
+Ou baixe o binário do SO na [página de Releases](https://github.com/semog-projects/MCP.Harness/releases).
+Publicação: [`docs/publicacao.md`](docs/publicacao.md).
+
+**Durante o desenvolvimento deste repo** — `dotnet run`:
 
 ```jsonc
 // .mcp.json (na raiz do repo que vai usar o harness)
@@ -102,27 +134,9 @@ voltam como texto `❌ …` no resultado da tool, não como falha crua.
 }
 ```
 
-**Em produção** — binário self-contained (não precisa de .NET instalado):
-
-```bash
-dotnet publish src/MCP.Harness/MCP.Harness.csproj -c Release \
-  -r linux-x64 --self-contained -o ~/.local/share/mcp-harness
-# RIDs: linux-x64 · osx-arm64 · win-x64
-```
-
-```jsonc
-// .mcp.json
-{
-  "mcpServers": {
-    "harness": {
-      "command": "/home/voce/.local/share/mcp-harness/mcp-harness",
-      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
-    }
-  }
-}
-```
-
-O `appsettings.json` publicado ao lado do binário pode carregar
+Build local self-contained: `dotnet publish src/MCP.Harness/MCP.Harness.csproj
+-c Release -r <RID> -o <destino>` e aponte `command` para `<destino>/mcp-harness`.
+O `appsettings.json` publicado ao lado do binário carrega
 `Harness:TemplateOwner`, `Harness:DefaultRepo`, etc. sem env vars.
 
 ### Passo a passo num repo novo
@@ -159,10 +173,12 @@ dotnet run --project src/MCP.Harness
 ## Estrutura
 
 ```
-src/MCP.Harness/           # host do servidor MCP: tools, resources, appsettings.json
+src/MCP.Harness/           # host do servidor MCP: tools, resources, appsettings.json, .mcp/server.json
 src/MCP.Harness.GitHub/    # cliente GitHub (GraphQL Projects v2 + REST Issues) + serviços do harness
 tests/MCP.Harness.Tests/   # testes de unidade e integração
-docs/                      # uma página por tool + configuracao.md
+docs/                      # uma página por tool + configuracao.md + publicacao.md
+Dockerfile                 # imagem stdio (GHCR)
+.github/workflows/         # ci.yml (build+test) · release.yml (tag v* → NuGet/GHCR/Release)
 scripts/bootstrap.sh       # script legado — referência para a tool harness_bootstrap
 ```
 

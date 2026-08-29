@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+  "name": "io.github.semog-projects/MCP.Harness",
+  "description": "Servidor MCP do sprint harness: bootstrap de board (GitHub Projects v2), criação de Issues rastreadas, transição de Status e snapshot da sprint.",
+  "version": "0.1.0",
+  "repository": {
+    "url": "https://github.com/semog-projects/MCP.Harness",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "nuget",
+      "identifier": "MCP.Harness",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [],
+      "environmentVariables": [
+        {
+          "name": "GITHUB_TOKEN",
+          "description": "PAT do GitHub com escopos 'repo', 'project' e 'read:org'.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "HARNESS_TEMPLATE_OWNER",
+          "description": "Dono do Project-template v2 (default: semog-projects).",
+          "isRequired": false
+        },
+        {
+          "name": "HARNESS_TEMPLATE_NUMBER",
+          "description": "Número do Project-template v2 (default: 7).",
+          "isRequired": false
+        },
+        {
+          "name": "HARNESS_DEFAULT_REPO",
+          "description": "owner/repo do resource harness://board/current.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}
