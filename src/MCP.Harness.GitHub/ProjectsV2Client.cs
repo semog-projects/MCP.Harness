@@ -209,6 +209,47 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
         return null;
     }
 
+    /// <summary>
+    /// Acha o item que representa a Issue <paramref name="issueNumber"/> no
+    /// board <paramref name="project"/>, ou <c>null</c> se ela não estiver lá.
+    /// </summary>
+    public async Task<ProjectItemRef?> FindItemByIssueAsync(
+        HarnessProject project, RepoRef repo, int issueNumber, CancellationToken ct = default)
+    {
+        const string query = """
+            query($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $number) {
+                  projectItems(first: 20, includeArchived: true) {
+                    nodes { id project { id } }
+                  }
+                }
+              }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { owner = repo.Owner, repo = repo.Repo, number = issueNumber },
+            $"localizar item da Issue #{issueNumber} no Project #{project.Number}", ct);
+
+        var repository = data.GetProperty("repository");
+        if (repository.ValueKind == JsonValueKind.Null
+            || repository.GetProperty("issue").ValueKind == JsonValueKind.Null)
+        {
+            throw new GitHubException($"Issue #{issueNumber} não encontrada em {repo}.");
+        }
+
+        foreach (var node in repository.GetProperty("issue").GetProperty("projectItems").GetProperty("nodes").EnumerateArray())
+        {
+            if (node.GetProperty("project").GetProperty("id").GetString() == project.Id)
+            {
+                return new ProjectItemRef(node.GetProperty("id").GetString()!);
+            }
+        }
+
+        return null;
+    }
+
     public async Task<ProjectItemRef> AddIssueAsync(
         HarnessProject project, string issueNodeId, CancellationToken ct = default)
     {

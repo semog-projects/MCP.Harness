@@ -28,17 +28,17 @@ Ciclo de vida de uma task:
 
 A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 
-## O que o servidor expõe (visão alvo)
+## O que o servidor expõe
 
 ### Tools
 
-| Tool                   | Descrição                                                                              |
-| ---------------------- | ------------------------------------------------------------------------------------- |
-| `harness_bootstrap`    | Cria o Project v2 a partir do template padronizado e vincula ao repo (porta do `bootstrap.sh`). |
-| `harness_create_task`  | Cria a Issue, adiciona ao Project, define `Status = Backlog` e a `Sprint` atual.       |
-| `harness_move_task`    | Move o `Status` de um item (`Todo` / `Doing` / `Done`).                                |
-| `harness_complete_task`| Define `Status = Done` e fecha a Issue com `state_reason = completed`.                  |
-| `harness_board`        | Lê os itens da sprint atual, com `Status`, `Story Points` e link da Issue.             |
+| Tool                   | Estado | Descrição                                                                     |
+| ---------------------- | ------ | --------------------------------------------------------------------------- |
+| `harness_bootstrap`    | ✅     | Cria o Project v2 a partir do template padronizado e vincula ao repo (porta do `bootstrap.sh`). |
+| `harness_create_task`  | ✅     | Cria a Issue, adiciona ao Project, `Status = Backlog` e a `Sprint` atual. Dedup por título. |
+| `harness_move_task`    | 🔜     | Move o `Status` de um item (`Todo` / `Doing` / `Done`).                       |
+| `harness_complete_task`| 🔜     | Define `Status = Done` e fecha a Issue com `state_reason = completed`.         |
+| `harness_board`        | 🔜     | Lê os itens da sprint atual, com `Status`, `Story Points` e link da Issue.     |
 
 ### Resources
 
@@ -65,9 +65,10 @@ Variáveis de ambiente:
 | `HARNESS_TEMPLATE_OWNER`  | `semog-projects`  | dono do Project-template v2 (`Harness:TemplateOwner`) |
 | `HARNESS_TEMPLATE_NUMBER` | `7`               | número do Project-template v2 (`Harness:TemplateNumber`) |
 
-A tool `harness_bootstrap` já está implementada — ver
-[`docs/harness_bootstrap.md`](docs/harness_bootstrap.md) para a assinatura e
-as diferenças em relação ao `scripts/bootstrap.sh`.
+Tools já implementadas:
+[`harness_bootstrap`](docs/harness_bootstrap.md) (assinatura e diferenças
+vs `scripts/bootstrap.sh`) e
+[`harness_create_task`](docs/harness_create_task.md).
 
 ### Registrar no Claude Code
 
