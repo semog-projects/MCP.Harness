@@ -38,14 +38,15 @@ A **Issue é a fonte de verdade** — nunca arquivos `.md` soltos no repo.
 | `harness_create_task`  | ✅     | Cria a Issue, adiciona ao Project, `Status = Backlog` e a `Sprint` atual. Dedup por título. |
 | `harness_move_task`    | ✅     | Move o `Status` de um item (`Backlog` / `Todo` / `Doing` / `Done`); valida a opção. |
 | `harness_complete_task`| ✅     | Define `Status = Done` e fecha a Issue com `state_reason = completed`. Idempotente. |
-| `harness_board`        | 🔜     | Lê os itens da sprint atual, com `Status`, `Story Points` e link da Issue.     |
+| `harness_board`        | ✅     | Snapshot da sprint (default: corrente), agrupado por `Status` com soma de `Story Points`. |
 
 ### Resources
 
-| Resource                   | Conteúdo                                            |
-| -------------------------- | -------------------------------------------------- |
-| `harness://board/current`  | Snapshot em JSON do board da sprint corrente.       |
-| `harness://config`         | Configuração efetiva (owner/número do template).    |
+| Resource                            | Estado | Conteúdo                                             |
+| ----------------------------------- | ------ | -------------------------------------------------- |
+| `harness://board/{owner}/{repo}`    | ✅     | Snapshot JSON da sprint corrente do board do repo.  |
+| `harness://board/current`           | ✅     | Idem, para o repo padrão (`Harness:DefaultRepo`).   |
+| `harness://config`                  | 🔜     | Configuração efetiva (owner/número do template).    |
 
 ## Stack
 
@@ -69,8 +70,9 @@ Tools já implementadas:
 [`harness_bootstrap`](docs/harness_bootstrap.md) (assinatura e diferenças
 vs `scripts/bootstrap.sh`),
 [`harness_create_task`](docs/harness_create_task.md),
-[`harness_move_task`](docs/harness_move_task.md) e
-[`harness_complete_task`](docs/harness_complete_task.md).
+[`harness_move_task`](docs/harness_move_task.md),
+[`harness_complete_task`](docs/harness_complete_task.md) e
+[`harness_board`](docs/harness_board.md).
 
 Erros de domínio (status inválido, Issue fora do board, token sem escopo…)
 voltam como texto `❌ …` no resultado da tool, não como falha crua.

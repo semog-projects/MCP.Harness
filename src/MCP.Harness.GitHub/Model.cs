@@ -82,3 +82,32 @@ public sealed record ProjectItemRef(string Id);
 
 /// <summary>Project recém-copiado de um template (antes de resolver os campos).</summary>
 public sealed record CopiedProject(string Id, int Number, string Title, string Url);
+
+/// <summary>Um item do board (uma Issue), com os valores de campo do harness.</summary>
+public sealed record BoardItem(
+    int Number,
+    string Title,
+    string Url,
+    string State,
+    string? Status,
+    string? Sprint,
+    double? StoryPoints,
+    IReadOnlyList<string> Assignees);
+
+/// <summary>Uma coluna do board (um valor de <c>Status</c>) com seus itens.</summary>
+public sealed record BoardColumn(string Status, IReadOnlyList<BoardItem> Items)
+{
+    public double StoryPoints => Items.Sum(i => i.StoryPoints ?? 0);
+}
+
+/// <summary>Snapshot do board para uma sprint.</summary>
+public sealed record BoardSnapshot(
+    int ProjectNumber,
+    string ProjectUrl,
+    string Sprint,
+    IReadOnlyList<BoardColumn> Columns)
+{
+    public int ItemCount => Columns.Sum(c => c.Items.Count);
+
+    public double StoryPoints => Columns.Sum(c => c.StoryPoints);
+}
