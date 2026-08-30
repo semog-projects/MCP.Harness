@@ -5,10 +5,16 @@ namespace MCP.Harness.GitHub;
 /// <summary>Resultado de um bootstrap de board.</summary>
 /// <param name="Created">
 /// <c>true</c> se o Project foi criado agora; <c>false</c> se já existia
-/// vinculado (operação idempotente).
+/// (vinculado ou órfão).
+/// </param>
+/// <param name="Linked">
+/// <c>true</c> se o Project está vinculado ao repositório. Pode ser
+/// <c>false</c> se o token não tem permissão de <c>linkProjectV2ToRepository</c>
+/// (PAT fine-grained) — nesse caso há um aviso com o passo manual.
 /// </param>
 public sealed record BootstrapResult(
     bool Created,
+    bool Linked,
     HarnessProject Project,
     ProjectIteration? CurrentSprint,
     IReadOnlyList<ProjectIteration> Sprints,
@@ -30,37 +36,75 @@ public sealed class BootstrapService(ProjectsV2Client projects, IOptions<Harness
         title = string.IsNullOrWhiteSpace(title) ? $"{target.Repo} Sprints" : title.Trim();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
-        // Idempotência: se já existe um board válido, não cria outro.
-        var existing = await FindExistingBoardAsync(target, ct);
-        if (existing is not null)
+        // 1. Já vinculado ao repo? Idempotente, nada a fazer.
+        if (await FindLinkedBoardAsync(target, ct) is { } linked)
         {
-            return new BootstrapResult(
-                Created: false,
-                Project: existing,
-                CurrentSprint: existing.Field("Sprint")?.CurrentIteration(today),
-                Sprints: SprintsOf(existing),
-                Warnings: Validate(existing, today));
+            return Result(created: false, isLinked: true, linked, today, extra: []);
         }
 
+        var repositoryId = await projects.ResolveRepositoryIdAsync(target, ct);
+
+        // 2. Existe no owner mas não vinculado (link falhou antes, ou linkado
+        //    fora do harness). Não cria outro: tenta (re)vincular e devolve.
+        if (await FindOrphanBoardAsync(target.Owner, title, ct) is { } orphan)
+        {
+            var warnings = new List<string>();
+            var relinked = await TryLinkAsync(
+                new ProjectRef(orphan.Id, orphan.Number), repositoryId, target, warnings, ct);
+            var board = await projects.GetProjectByNumberAsync(target.Owner, orphan.Number, ct);
+            return Result(created: false, isLinked: relinked, board, today, warnings);
+        }
+
+        // 3. Criar do template.
         var template = await projects.GetProjectByNumberAsync(
             _options.TemplateOwner, _options.TemplateNumber, ct);
         var targetOwnerId = await projects.ResolveOwnerIdAsync(target.Owner, ct);
-        var repositoryId = await projects.ResolveRepositoryIdAsync(target, ct);
 
         var copied = await projects.CopyProjectAsync(template.Id, targetOwnerId, title, ct);
-        await projects.LinkRepositoryAsync(copied.Id, repositoryId, ct);
 
-        var board = await projects.GetProjectByNumberAsync(target.Owner, copied.Number, ct);
+        var createWarnings = new List<string>();
+        var freshlyLinked = await TryLinkAsync(
+            new ProjectRef(copied.Id, copied.Number), repositoryId, target, createWarnings, ct);
+        var newBoard = await projects.GetProjectByNumberAsync(target.Owner, copied.Number, ct);
 
-        return new BootstrapResult(
-            Created: true,
-            Project: board,
-            CurrentSprint: board.Field("Sprint")?.CurrentIteration(today),
-            Sprints: SprintsOf(board),
-            Warnings: Validate(board, today));
+        return Result(created: true, isLinked: freshlyLinked, newBoard, today, createWarnings);
     }
 
-    private async Task<HarnessProject?> FindExistingBoardAsync(RepoRef target, CancellationToken ct)
+    private readonly record struct ProjectRef(string Id, int Number);
+
+    private BootstrapResult Result(
+        bool created, bool isLinked, HarnessProject board, DateOnly today, IReadOnlyList<string> extra)
+    {
+        var warnings = new List<string>(Validate(board, today));
+        warnings.AddRange(extra);
+        return new BootstrapResult(
+            created, isLinked, board,
+            board.Field("Sprint")?.CurrentIteration(today),
+            SprintsOf(board),
+            warnings);
+    }
+
+    private async Task<bool> TryLinkAsync(
+        ProjectRef project, string repositoryId, RepoRef target, List<string> warnings, CancellationToken ct)
+    {
+        try
+        {
+            await projects.LinkRepositoryAsync(project.Id, repositoryId, ct);
+            return true;
+        }
+        catch (GitHubException ex)
+        {
+            warnings.Add(
+                $"Project #{project.Number} criado, mas NÃO foi vinculado ao repositório ({ex.Message}). " +
+                $"linkProjectV2ToRepository costuma exigir um token CLÁSSICO com scope 'project' " +
+                $"(PAT fine-grained não serve). Vincule com: " +
+                $"gh project link {project.Number} --owner {target.Owner} --repo {target.Repo} " +
+                $"— ou pela UI do repo em Projects → Link a project. Rode harness_bootstrap de novo depois para confirmar.");
+            return false;
+        }
+    }
+
+    private async Task<HarnessProject?> FindLinkedBoardAsync(RepoRef target, CancellationToken ct)
     {
         var linked = await projects.ListLinkedProjectsAsync(target, ct);
         return linked.Count switch
@@ -70,6 +114,23 @@ public sealed class BootstrapService(ProjectsV2Client projects, IOptions<Harness
             _ => linked.FirstOrDefault(p => p.Title.EndsWith("Sprints", StringComparison.OrdinalIgnoreCase))
                  ?? linked[0],
         };
+    }
+
+    private async Task<HarnessProject?> FindOrphanBoardAsync(string owner, string title, CancellationToken ct)
+    {
+        IReadOnlyList<HarnessProject> ownerProjects;
+        try
+        {
+            ownerProjects = await projects.ListOwnerProjectsAsync(owner, ct);
+        }
+        catch (GitHubException)
+        {
+            return null; // sem permissão pra listar os projects do owner — segue pro passo 3
+        }
+
+        // Só por título EXATO — "termina em Sprints" pegaria o board de outro repo.
+        return ownerProjects.FirstOrDefault(p =>
+            string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase));
     }
 
     private IReadOnlyList<string> Validate(HarnessProject board, DateOnly today)
