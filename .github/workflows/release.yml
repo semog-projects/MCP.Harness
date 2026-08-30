@@ -12,6 +12,7 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write        # NuGet Trusted Publishing (OIDC)
 
 env:
   VERSION: ${{ github.event.inputs.version || '' }}
@@ -50,16 +51,26 @@ jobs:
           json.dump(d, open(path, "w"), indent=2, ensure_ascii=False)
           PY
       - run: dotnet pack src/MCP.Harness/MCP.Harness.csproj -c Release -p:Version=${{ needs.version.outputs.version }} -o out
+
+      # Trusted Publishing (OIDC): sem API key. Requer a policy criada em
+      # nuget.org/account/trustedpublishing (Repository Owner=semog-projects,
+      # Repository=MCP.Harness, Workflow file=release.yml) e a variável de
+      # repo NUGET_USER com o username do nuget.org. Sem a variável, pula.
+      - name: NuGet login (OIDC)
+        id: nuget-login
+        if: vars.NUGET_USER != ''
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
       - name: Push para NuGet.org
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: vars.NUGET_USER != ''
         run: |
-          if [ -z "$NUGET_API_KEY" ]; then
-            echo "::warning::NUGET_API_KEY não configurado — pulando o push para o NuGet.org."
-            exit 0
-          fi
-          dotnet nuget push "out/*.nupkg" --api-key "$NUGET_API_KEY" \
+          dotnet nuget push "out/*.nupkg" \
+            --api-key "${{ steps.nuget-login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json --skip-duplicate
+      - name: NuGet não configurado
+        if: vars.NUGET_USER == ''
+        run: echo "::warning::variável de repo NUGET_USER ausente — pulando o push para o NuGet.org."
 
   container:
     needs: version

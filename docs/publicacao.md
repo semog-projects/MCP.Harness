@@ -5,20 +5,36 @@ O servidor é publicado de três formas por uma tag `vX.Y.Z`
 
 | Destino          | Como o consumidor usa            | Exige do mantenedor            |
 | ---------------- | -------------------------------- | ----------------------------- |
-| **NuGet.org**    | `dotnet dnx MCP.Harness`         | secret `NUGET_API_KEY`        |
+| **NuGet.org**    | `dotnet dnx MCP.Harness`         | policy de Trusted Publishing + var `NUGET_USER` |
 | **GHCR**         | `docker run … ghcr.io/…/mcp-harness` | nada (usa o `GITHUB_TOKEN`) |
 | **GitHub Release** | baixa o binário do SO             | nada                          |
 
 ## Setup único
 
-1. **NuGet** — crie uma conta em nuget.org, gere uma API key com escopo
-   *Push* para o glob `MCP.Harness*`, e adicione no repo:
-   `Settings → Secrets and variables → Actions → New secret` →
-   `NUGET_API_KEY`. Sem esse secret o job de NuGet só emite um warning e
-   segue (GHCR e Release continuam).
-2. **GHCR** — nada. Na 1ª publicação o pacote nasce privado; deixe público
-   em `github.com/orgs/semog-projects/packages` → `mcp-harness` →
-   *Package settings* → *Change visibility*.
+### 1. NuGet — Trusted Publishing (OIDC, sem API key)
+
+Em **nuget.org/account/trustedpublishing** → *Add*:
+
+| Campo             | Valor            |
+| ----------------- | ---------------- |
+| Publisher Name    | `mcp-harness-gha` (livre) |
+| Package Owner     | seu usuário/org  |
+| Repository Owner  | `semog-projects` |
+| Repository        | `MCP.Harness`    |
+| Workflow File     | `release.yml`    |
+| Environment       | *(vazio)*        |
+| Package glob      | `MCP.Harness*`   |
+
+Depois, no repo: `Settings → Secrets and variables → Actions → Variables →
+New variable` → **`NUGET_USER`** = seu username do nuget.org (não é segredo).
+Sem essa variável o job de NuGet só emite um warning e segue (GHCR e Release
+continuam). Não há secret de API key.
+
+### 2. GHCR
+
+Nada. Na 1ª publicação o pacote nasce privado; deixe público em
+`github.com/orgs/semog-projects/packages` → `mcp-harness` →
+*Package settings* → *Change visibility*.
 
 ## Publicar uma versão
 
@@ -28,8 +44,9 @@ git push origin v0.1.0
 ```
 
 O workflow: sincroniza a versão no `.mcp/server.json`, `dotnet pack` +
-`nuget push` (todas as RIDs), `docker buildx` multi-arch para o GHCR,
-publica os binários por SO e cria a Release com notas geradas.
+`dotnet nuget push` autenticado por OIDC (`NuGet/login`, todas as RIDs),
+`docker buildx` multi-arch para o GHCR, publica os binários por SO e cria a
+Release com notas geradas.
 
 Também dá pra rodar manualmente: *Actions → Release → Run workflow* com a
 versão.
