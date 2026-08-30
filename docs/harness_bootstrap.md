@@ -54,3 +54,8 @@ atual, lista de sprints não concluídas e eventuais avisos.
 Comportamento equivalente: ambos partem do mesmo template, produzem um
 Project com `Status` / `Sprint` / `Story Points` e o vinculam ao repo. O
 `bootstrap.sh` segue no repo como referência e para uso sem o servidor MCP.
+
+> Owner de organização e de usuário são suportados. A resolução sonda
+> `organization` e `user` na mesma query GraphQL; o GitHub reporta a
+> alternativa inexistente como erro parcial `NOT_FOUND`, que é tolerado
+> quando há `data` utilizável.

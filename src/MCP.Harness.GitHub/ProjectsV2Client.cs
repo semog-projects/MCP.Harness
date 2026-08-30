@@ -114,7 +114,9 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
             }
             """;
 
-        var data = await graphQl.ExecuteAsync(query, new { login }, $"resolver owner '{login}'", ct);
+        // organization/user: a alternativa inexistente volta como erro parcial NOT_FOUND.
+        var data = await graphQl.ExecuteAsync(
+            query, new { login }, $"resolver owner '{login}'", ct, allowPartialErrors: true);
         return NonNullId(data, "organization", "user")
             ?? throw new GitHubException($"Owner '{login}' não encontrado (organização ou usuário).");
     }
@@ -129,10 +131,10 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
             """;
 
         var data = await graphQl.ExecuteAsync(
-            query, new { owner = repo.Owner, repo = repo.Repo }, $"resolver repositório {repo}", ct);
+            query, new { owner = repo.Owner, repo = repo.Repo }, $"resolver repositório {repo}", ct,
+            allowPartialErrors: true);
 
-        var repository = data.GetProperty("repository");
-        return repository.ValueKind != JsonValueKind.Null
+        return data.TryGetProperty("repository", out var repository) && repository.ValueKind == JsonValueKind.Object
             ? repository.GetProperty("id").GetString()!
             : throw new GitHubException($"Repositório {repo} não encontrado (ou token sem acesso).");
     }
@@ -149,7 +151,8 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
             """;
 
         var data = await graphQl.ExecuteAsync(
-            query, new { login, number }, $"resolver Project #{number} de '{login}'", ct);
+            query, new { login, number }, $"resolver Project #{number} de '{login}'", ct,
+            allowPartialErrors: true);
 
         foreach (var prop in (ReadOnlySpan<string>)["organization", "user"])
         {

@@ -38,6 +38,14 @@ public class BootstrapServiceTests
     private static HttpResponseMessage Ok(string data) =>
         StubHttpMessageHandler.Json(HttpStatusCode.OK, $$"""{ "data": {{data}} }""");
 
+    // Como o GitHub responde ao sondar organization+user quando o login é uma org:
+    // data com o campo válido + um erro parcial NOT_FOUND para o campo inexistente.
+    private static HttpResponseMessage OkOrgProbe(string data) =>
+        StubHttpMessageHandler.Json(HttpStatusCode.OK, $$"""
+            { "data": {{data}},
+              "errors": [ { "type": "NOT_FOUND", "path": ["user"], "message": "Could not resolve to a User." } ] }
+            """);
+
     /// <summary>Dispatcher comum: cobre o caminho feliz do bootstrap.</summary>
     private static HttpResponseMessage HappyPath(string body, IReadOnlyList<string> linkedNodes)
     {
@@ -51,12 +59,12 @@ public class BootstrapServiceTests
             var node = body.Contains("\"login\":\"semog-projects\"")
                 ? ProjectNode("PVT_template", 7, "[TEMPLATE] Sprint Harness", Today)
                 : ProjectNode("PVT_new", 42, "MCP.Harness Sprints", Today);
-            return Ok($$"""{ "organization": { "projectV2": {{node}} }, "user": null }""");
+            return OkOrgProbe($$"""{ "organization": { "projectV2": {{node}} }, "user": null }""");
         }
 
         if (body.Contains("organization(login: $login)"))
         {
-            return Ok("""{ "organization": { "id": "OWNER_o" }, "user": null }""");
+            return OkOrgProbe("""{ "organization": { "id": "OWNER_o" }, "user": null }""");
         }
 
         if (body.Contains("repository(owner: $owner, name: $repo)"))
