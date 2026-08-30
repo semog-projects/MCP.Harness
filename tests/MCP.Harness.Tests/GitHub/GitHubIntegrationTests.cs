@@ -33,6 +33,24 @@ public class GitHubIntegrationTests
     }
 
     [SkippableFact]
+    public async Task Resolves_org_owned_project_and_owner_id()
+    {
+        Skip.IfNot(Enabled, "defina HARNESS_IT=1 e GITHUB_TOKEN para rodar os testes de integração");
+
+        using var provider = BuildProvider();
+        var projects = provider.GetRequiredService<ProjectsV2Client>();
+
+        // semog-projects é organização — a query sonda organization+user e o
+        // GitHub reporta 'user' como erro parcial NOT_FOUND.
+        var ownerId = await projects.ResolveOwnerIdAsync("semog-projects");
+        Assert.StartsWith("O_", ownerId); // node id de Organization
+
+        var board = await projects.GetProjectByNumberAsync("semog-projects", 9);
+        Assert.Equal(9, board.Number);
+        Assert.NotNull(board.Field("Status"));
+    }
+
+    [SkippableFact]
     public async Task Create_task_places_on_board_and_dedups_on_second_call()
     {
         Skip.IfNot(Enabled, "defina HARNESS_IT=1 e GITHUB_TOKEN para rodar os testes de integração");
