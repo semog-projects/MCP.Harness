@@ -28,9 +28,14 @@ public sealed class BootstrapTools
         var sb = new StringBuilder();
         var project = result.Project;
 
-        sb.AppendLine(result.Created
-            ? $"✅ Board criado: **{project.Title}** (Project #{project.Number})"
-            : $"ℹ️ Board já vinculado: **{project.Title}** (Project #{project.Number}) — nada a fazer.");
+        var head = (result.Created, result.Linked) switch
+        {
+            (true, true) => "✅ Board criado e vinculado",
+            (true, false) => "⚠️ Board criado, mas NÃO vinculado ao repo (ver avisos)",
+            (false, true) => "ℹ️ Board já vinculado — nada a fazer",
+            (false, false) => "⚠️ Board já existe mas NÃO está vinculado ao repo (ver avisos)",
+        };
+        sb.AppendLine($"{head}: **{project.Title}** (Project #{project.Number})");
         sb.AppendLine($"URL: {project.Url}");
 
         var fields = string.Join(", ", project.Fields

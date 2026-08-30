@@ -24,21 +24,33 @@ Template de origem (configurável):
 
 ## O que faz
 
-1. Lista os Projects v2 já vinculados ao repo. **Se já houver um** (único, ou
-   um cujo título termina em "Sprints"), não cria nada e reporta o estado
-   atual — a tool é **idempotente**.
-2. Resolve o template (`GetProjectByNumberAsync`), o node id do owner alvo e
-   o node id do repositório.
-3. `copyProjectV2` — copia o template para o owner alvo com o título dado.
-4. `linkProjectV2ToRepository` — vincula o Project novo ao repositório.
-5. Re-resolve o board criado e valida: campos `Status` / `Sprint` /
-   `Story Points` presentes, e se o calendário de iterações do `Sprint`
-   parece herdado do template (datas no passado).
+1. **Já vinculado ao repo?** Se sim, não cria nada e reporta — idempotente.
+2. **Existe no owner mas não vinculado?** (link falhou antes, ou o board foi
+   criado fora do harness.) Procura nos Projects do owner um com o **título
+   exato** esperado; se achar, tenta (re)vincular e devolve esse — **não cria
+   um segundo**.
+3. **Senão, cria:** resolve o template, copia (`copyProjectV2`) para o owner
+   alvo, e vincula (`linkProjectV2ToRepository`).
+4. Re-resolve o board e valida: campos `Status` / `Sprint` / `Story Points`
+   presentes; calendário de `Sprint` herdado do template (datas no passado).
+
+O vínculo é **best-effort**: se `linkProjectV2ToRepository` falhar por
+permissão (típico de PAT **fine-grained** — a mutation costuma exigir um
+token **clássico** com scope `project`), o Project **não é descartado**. A
+saída marca `NÃO vinculado` e traz o comando manual:
+
+```
+gh project link <número> --owner <owner> --repo <repo>
+```
+
+(ou UI do repo → *Projects* → *Link a project*). Rode `harness_bootstrap` de
+novo depois — o passo 2 reconhece o board e confirma o vínculo.
 
 ## Saída
 
-Texto com: se criou ou já existia, número e URL do Project, campos, sprint
-atual, lista de sprints não concluídas e eventuais avisos.
+`✅ Board criado e vinculado` / `⚠️ Board criado, mas NÃO vinculado` /
+`ℹ️ Board já vinculado` / `⚠️ Board já existe mas NÃO está vinculado`, mais
+número e URL do Project, campos, sprint atual, lista de sprints e avisos.
 
 ## Diferenças em relação ao `scripts/bootstrap.sh`
 

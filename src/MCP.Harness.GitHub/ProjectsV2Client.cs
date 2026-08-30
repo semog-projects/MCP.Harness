@@ -166,6 +166,35 @@ public sealed class ProjectsV2Client(GraphQlClient graphQl)
         throw new GitHubException($"Project #{number} não encontrado em '{login}'.");
     }
 
+    /// <summary>
+    /// Lista os Projects v2 de um owner (org ou usuário), com campos. Usado
+    /// para achar um board já criado mas ainda não vinculado ao repo.
+    /// </summary>
+    public async Task<IReadOnlyList<HarnessProject>> ListOwnerProjectsAsync(
+        string login, CancellationToken ct = default)
+    {
+        const string query = $$"""
+            query($login: String!) {
+              organization(login: $login) { projectsV2(first: 50) { nodes { {{ProjectFragment}} } } }
+              user(login: $login) { projectsV2(first: 50) { nodes { {{ProjectFragment}} } } }
+            }
+            """;
+
+        var data = await graphQl.ExecuteAsync(
+            query, new { login }, $"listar Projects de '{login}'", ct, allowPartialErrors: true);
+
+        foreach (var prop in (ReadOnlySpan<string>)["organization", "user"])
+        {
+            if (data.TryGetProperty(prop, out var owner) && owner.ValueKind == JsonValueKind.Object
+                && owner.TryGetProperty("projectsV2", out var list) && list.ValueKind == JsonValueKind.Object)
+            {
+                return list.GetProperty("nodes").EnumerateArray().Select(ParseProject).ToList();
+            }
+        }
+
+        return [];
+    }
+
     /// <summary>Copia um Project v2 (template) para outro owner. Mutation <c>copyProjectV2</c>.</summary>
     public async Task<CopiedProject> CopyProjectAsync(
         string sourceProjectId, string targetOwnerId, string title, CancellationToken ct = default)

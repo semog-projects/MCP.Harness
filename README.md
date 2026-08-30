@@ -142,9 +142,14 @@ O `appsettings.json` publicado ao lado do binário carrega
 ### Passo a passo num repo novo
 
 1. Gere um PAT com escopos `repo`, `project`, `read:org` → `export GITHUB_TOKEN=…`.
+   Para o `harness_bootstrap` **vincular** o Project ao repo, use um PAT
+   **clássico** — a mutation `linkProjectV2ToRepository` não funciona com PAT
+   fine-grained. As demais tools funcionam com fine-grained (Projects RW +
+   Issues RW + Contents R).
 2. Adicione o `.mcp.json` acima na raiz do repo.
 3. Rode o harness uma vez: tool `harness_bootstrap` com `owner`/`repo` do repo
-   novo — cria o Project v2 e vincula.
+   novo — cria o Project v2 e vincula. Se aparecer `⚠️ NÃO vinculado`, siga o
+   `gh project link` da mensagem e rode de novo.
 4. A partir daí, `harness_create_task` / `harness_move_task` /
    `harness_complete_task` / `harness_board`.
 
@@ -155,6 +160,7 @@ O `appsettings.json` publicado ao lado do binário carrega
 | `❌ … token sem permissão` / `token inválido ou expirado`      | PAT sem escopo `project` ou `read:org`, ou expirado. Gere outro.          |
 | `❌ … rate limit do GitHub atingido`                          | Espere o horário do reset informado na mensagem.                          |
 | `❌ Nenhum Project v2 vinculado a …`                          | Rode `harness_bootstrap` primeiro.                                        |
+| `harness_bootstrap`: `⚠️ Board criado, mas NÃO vinculado`     | `linkProjectV2ToRepository` exige token **clássico** com scope `project` (PAT fine-grained não serve). Rode o `gh project link` da mensagem, ou linke na UI, e rode `harness_bootstrap` de novo. |
 | `❌ … template #7 … pode estar desconfigurado`               | `HARNESS_TEMPLATE_OWNER`/`NUMBER` apontam para um Project sem os campos padrão. |
 | `❌ Issue #N não está no board`                              | Use `harness_create_task` (ou adicione a Issue ao Project na UI).          |
 | Nenhum token encontrado                                       | `export GITHUB_TOKEN=…`, ou `gh auth login`, ou preencha `GitHub:Token`.   |
